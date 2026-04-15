@@ -44,7 +44,7 @@ import re
 from typing import Any
 
 from dotenv import load_dotenv
-from crewai import Agent, Crew, Task
+from crewai import Agent, Crew, Task, LLM
 
 # ---------------------------------------------------------------------------
 # Bootstrap
@@ -59,13 +59,23 @@ logging.basicConfig(
 logger = logging.getLogger("picklePi.scrum_team")
 
 # Validate that the minimum required env vars are present before proceeding.
-_REQUIRED_ENV_VARS = ["OPENAI_API_KEY"]
+_REQUIRED_ENV_VARS = ["GEMINI_API_KEY"]
 _missing = [v for v in _REQUIRED_ENV_VARS if not os.getenv(v)]
 if _missing:
     raise EnvironmentError(
         f"Missing required environment variable(s): {', '.join(_missing)}. "
-        "Copy scrum_team/.env.example to scrum_team/.env and fill in the values."
+        "Copy .env.example to .env and fill in the values."
     )
+
+# ---------------------------------------------------------------------------
+# LLM – Gemini via LiteLLM
+# ---------------------------------------------------------------------------
+
+_gemini_model = os.getenv("GEMINI_MODEL", "gemini/gemini-2.0-flash")
+gemini_llm = LLM(
+    model=_gemini_model,
+    api_key=os.getenv("GEMINI_API_KEY"),
+)
 
 # ---------------------------------------------------------------------------
 # Firebase – project-board sync (placeholder)
@@ -181,6 +191,7 @@ product_owner = Agent(
         "You always ask 'Is this safe for a student to run?' and 'Is this the "
         "highest-value increment for this sprint?'"
     ),
+    llm=gemini_llm,
     verbose=True,
     allow_delegation=False,
 )
@@ -199,6 +210,7 @@ lead_developer = Agent(
         "treat every GPIO interaction as a potential safety boundary. You never "
         "use eval(), exec(), or shell=True without an explicit security review."
     ),
+    llm=gemini_llm,
     verbose=True,
     allow_delegation=False,
 )
@@ -219,6 +231,7 @@ business_analyst = Agent(
         "failure mode?' – and you turn ambiguous ideas into crisp, reviewable "
         "specifications that leave no room for misinterpretation."
     ),
+    llm=gemini_llm,
     verbose=True,
     allow_delegation=False,
 )
@@ -237,6 +250,7 @@ security_auditor = Agent(
         "code with the assumption that it will be run by a student on physical "
         "hardware. You are the last line of defence before deployment."
     ),
+    llm=gemini_llm,
     verbose=True,
     allow_delegation=False,
 )
@@ -257,6 +271,7 @@ scrum_master = Agent(
         "continuous improvement and making the next sprint run more smoothly "
         "than the last."
     ),
+    llm=gemini_llm,
     verbose=True,
     allow_delegation=False,
 )
@@ -304,12 +319,20 @@ task_create_user_story = Task(
         "     educational learning objectives.\n"
         "  5. Flag any potential hardware safety risks or dependencies that could "
         "     block the sprint.\n"
-        "Deliver the backlog item as a structured text block for development."
+        "Format your entire output in Markdown. Use ## headings for each section, "
+        "bullet points for lists, and bold text for key terms. "
+        "Deliver the backlog item as a clearly formatted Markdown document."
     ),
     expected_output=(
-        "A sprint-ready backlog item with priority, scope boundaries, definition "
-        "of done, acceptance criteria, preserved constraints, GPIO details, "
-        "security notes, and learning objectives."
+        "A Markdown-formatted sprint backlog item with the following sections:\n"
+        "## Sprint Backlog Item\n"
+        "## Priority & Scope\n"
+        "## Acceptance Criteria\n"
+        "## Definition of Done\n"
+        "## GPIO & Hardware Notes\n"
+        "## Security Considerations\n"
+        "## Learning Objectives\n"
+        "## Risks & Dependencies"
     ),
     agent=product_owner,
     context=[task_refine_requirements],
@@ -328,11 +351,18 @@ task_implement_feature = Task(
         "  6. Preserve all non-negotiable requirements and hardware safety constraints "
         "     from the Business Analyst package.\n"
         "  7. Add docstrings and inline comments explaining security decisions.\n"
-        "Deliver the complete, runnable source file(s) with a brief explanation."
+        "Format your entire output in Markdown. Use ## headings for each section, "
+        "fenced code blocks (```python) for all source code, and bullet points for "
+        "explanatory lists. Deliver the implementation as a clearly formatted Markdown document."
     ),
     expected_output=(
-        "Complete, commented Python 3 source code that implements the user story, "
-        "together with a short explanation of the security measures applied."
+        "A Markdown-formatted implementation document with the following sections:\n"
+        "## Implementation Summary\n"
+        "## Security Measures Applied\n"
+        "## Source Code\n"
+        "(fenced ```python code block)\n"
+        "## Input Validation Notes\n"
+        "## Hardware Safety Notes"
     ),
     agent=lead_developer,
     context=[task_refine_requirements, task_create_user_story],
@@ -352,12 +382,20 @@ task_security_audit = Task(
         "     APPROVED or BLOCKED verdict.\n"
         "  7. If BLOCKED, provide a concise remediation handoff for the Lead "
         "     Developer that identifies the minimum changes required for re-review.\n"
+        "Format your entire output in Markdown. Use ## headings for each section, "
+        "bold for PASS/FAIL labels, and inline code for any referenced code patterns. "
         "Only APPROVED output may proceed to a Done state on the project board."
     ),
     expected_output=(
-        "A structured security audit report with individual findings (PASS/FAIL), "
-        "CWE/OWASP references, remediation guidance, a developer handoff if "
-        "blocked, and a final APPROVED or BLOCKED verdict."
+        "A Markdown-formatted security audit report with the following sections:\n"
+        "## Audit Summary\n"
+        "## OWASP Top-10 Findings\n"
+        "(each item as a bullet: **PASS** or **FAIL** with CWE/OWASP ref)\n"
+        "## Principle of Least Privilege Review\n"
+        "## Input Validation Review\n"
+        "## Sensitive Data Review\n"
+        "## Remediation Handoff (if BLOCKED)\n"
+        "## Verdict: APPROVED or BLOCKED"
     ),
     agent=security_auditor,
     context=[task_refine_requirements, task_create_user_story, task_implement_feature],
@@ -374,11 +412,19 @@ task_remediate_security_findings = Task(
         "  3. Explain what changed and why each change resolves the cited risk.\n"
         "  4. Do not introduce new dependencies or risky patterns unless they are "
         "     explicitly justified.\n"
-        "Deliver the remediated implementation together with a short rework summary."
+        "Format your entire output in Markdown. Use ## headings for each section, "
+        "fenced code blocks (```python) for all updated source code, and a "
+        "bullet-point table mapping each finding to its fix. "
+        "Deliver the remediated package as a clearly formatted Markdown document."
     ),
     expected_output=(
-        "A remediated implementation package with a concise mapping from each "
-        "security finding to the code or configuration change that resolves it."
+        "A Markdown-formatted remediation package with the following sections:\n"
+        "## Rework Summary\n"
+        "## Finding-to-Fix Mapping\n"
+        "(bullet per finding: **Finding** → fix description)\n"
+        "## Remediated Source Code\n"
+        "(fenced ```python code block)\n"
+        "## Constraints Preserved"
     ),
     agent=lead_developer,
     context=[task_refine_requirements, task_create_user_story, task_implement_feature, task_security_audit],
@@ -391,11 +437,17 @@ task_reaudit_remediated_feature = Task(
         "  2. Identify any regressions introduced during remediation.\n"
         "  3. Produce a concise report with PASS/FAIL items and a final verdict line "
         "     in the form 'Verdict: APPROVED' or 'Verdict: BLOCKED'.\n"
+        "Format your entire output in Markdown. Use ## headings for each section "
+        "and bold **PASS** / **FAIL** labels for each finding. "
         "Only APPROVED output may proceed to a Done state on the project board."
     ),
     expected_output=(
-        "A concise re-audit report confirming whether the remediated feature is "
-        "APPROVED or remains BLOCKED."
+        "A Markdown-formatted re-audit report with the following sections:\n"
+        "## Re-Audit Summary\n"
+        "## Finding Resolution Status\n"
+        "(bullet per original finding: **PASS** or **FAIL** with brief note)\n"
+        "## Regression Check\n"
+        "## Verdict: APPROVED or BLOCKED"
     ),
     agent=security_auditor,
     context=[task_refine_requirements, task_create_user_story, task_implement_feature, task_security_audit, task_remediate_security_findings],
@@ -415,12 +467,18 @@ task_sprint_retrospective = Task(
         "     (BA, PO, Dev, Security Auditor, or Scrum Master) for each.\n"
         "  5. Confirm whether the sprint goal was met and whether the delivered "
         "     feature is ready for the picklePi curriculum.\n"
-        "Deliver the retrospective as a structured, actionable report."
+        "Format your entire output in Markdown. Use ## headings for each section, "
+        "numbered lists for action items, and bold text for owner assignments. "
+        "Deliver the retrospective as a clearly formatted Markdown document."
     ),
     expected_output=(
-        "A structured sprint retrospective report with sections for: went well, "
-        "blockers, process improvements, prioritised action items (with owners, "
-        "including Scrum Master where relevant), and a sprint-goal verdict."
+        "A Markdown-formatted sprint retrospective with the following sections:\n"
+        "## Sprint Goal Verdict\n"
+        "## What Went Well\n"
+        "## Blockers & Bottlenecks\n"
+        "## Process Improvements for Next Sprint\n"
+        "## Action Items\n"
+        "(numbered list with **Owner** per item)"
     ),
     agent=scrum_master,
     context=[
