@@ -1,4 +1,4 @@
-# 🥒 scrumtious — AI-Driven Scrum Team Orchestration
+# SCRUMtious — AI-Driven Scrum Team Orchestration
 
 > **picklePi** · Raspberry Pi GPIO education platform  
 > Powered by [CrewAI](https://github.com/joaomdmoura/crewAI) · Python 3.10+
