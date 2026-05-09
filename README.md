@@ -1,4 +1,4 @@
-# 🚀 Scrumtious — AI-Powered Scrum Team Orchestration
+# 🚀 SCRUMtious — AI-Powered Scrum Team Orchestration
 
 > Transform any feature idea into a full sprint cycle — requirements, user story, implementation, security audit, and retrospective — in one pipeline.
 
