@@ -91,12 +91,15 @@ Your Idea
 ```
 scrumtious/
 ├── app.py                  # FastAPI server — SSE streaming, session management, crew orchestration
-├── scrumtious.py           # Original standalone CLI script (full pipeline with Firebase sync)
-├── scrumtious_clean.py     # Simplified CLI version
 ├── templates/
 │   └── index.html          # Single-page UI (vanilla JS, marked.js, Inter font)
 ├── static/                 # Static assets (served at /static)
 ├── sessions/               # JSON session store (auto-created; gitignored)
+├── data/
+│   └── sprint-artifacts/   # Sample sprint output artifacts
+├── versions/
+│   ├── scrumtious.py       # Original standalone CLI script (full pipeline with Firebase sync)
+│   └── scrumtious_clean.py # Simplified CLI version
 ├── .env                    # Your local secrets (never committed)
 ├── .env.example            # Template for required environment variables
 ├── requirements.txt        # Python dependencies
@@ -223,7 +226,7 @@ The original standalone script includes an extended pipeline with a **remediatio
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `GEMINI_API_KEY` | ✅ | — | Google Gemini API key |
-| `GEMINI_MODEL` | No | `gemini/gemini-2.0-flash` | LiteLLM model string for CrewAI |
+| `GEMINI_MODEL` | No | `gemini/gemini-2.5-flash` | LiteLLM model string for CrewAI |
 | `FIREBASE_PROJECT_ID` | No | — | Firebase project ID for board sync |
 | `FIREBASE_SERVICE_ACCOUNT_KEY_PATH` | No | — | Path to Firebase service account JSON |
 | `HOST` | No | `127.0.0.1` | Server bind address |

@@ -12,13 +12,14 @@ import os
 import pathlib
 import re
 import threading
+import traceback
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -42,6 +43,12 @@ if _missing:
 app = FastAPI(title="Scrumtious", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> FileResponse:
+    """Serve favicon for browsers that request /favicon.ico directly."""
+    return FileResponse("static/favicon.svg", media_type="image/svg+xml")
 
 # --- JSON session persistence ---
 _SESSIONS_DIR = pathlib.Path("sessions")
@@ -151,13 +158,47 @@ def _extract_verdict(audit_output: str) -> str:
     return "UNKNOWN"
 
 
+def _build_error_payload(exc: Exception) -> dict[str, str]:
+    """Build a user-facing error payload while preserving raw diagnostics."""
+    raw_message = str(exc)
+    lower = raw_message.lower()
+
+    message = raw_message
+    hint = "Check server logs for traceback details."
+
+    if (
+        "api key expired" in lower
+        or "api_key_invalid" in lower
+        or "invalid api key" in lower
+    ):
+        message = "Gemini authentication failed: API key expired or invalid."
+        hint = (
+            "Set a fresh GEMINI_API_KEY in .env (Google AI Studio), "
+            "then restart the server."
+        )
+    elif "no longer available" in lower or "not supported for generatecontent" in lower:
+        message = "Gemini model is deprecated or unavailable for this project."
+        hint = "Set GEMINI_MODEL to a current model (for example: gemini/gemini-2.5-flash)."
+    elif "quota" in lower or "rate" in lower:
+        message = "Gemini request was rejected due to quota/rate limits."
+        hint = "Check project quota limits and retry later."
+
+    return {
+        "message": message,
+        "error_type": type(exc).__name__,
+        "hint": hint,
+        "raw_error": raw_message,
+        "traceback": traceback.format_exc(),
+    }
+
+
 def _run_crew_sync(session_id: str, idea: str, tech_stack: str = "", security_framework: str = "OWASP Top-10") -> None:
     """Run the CrewAI crew in a background thread, pushing events to the session."""
     from crewai import Agent, Crew, Task, LLM
 
     session = _sessions[session_id]
 
-    gemini_model = os.getenv("GEMINI_MODEL", "gemini/gemini-2.0-flash")
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
     gemini_llm = LLM(
         model=gemini_model,
         api_key=os.getenv("GEMINI_API_KEY"),
@@ -321,14 +362,29 @@ def _run_crew_sync(session_id: str, idea: str, tech_stack: str = "", security_fr
             id(task_retro): "scrum_master",
         }
 
+        def _safe_step_callback(*_args, **_kwargs):
+            # CrewAI callback signatures vary across versions; ignore payload safely.
+            return None
+
+        def _safe_task_callback(*args, **kwargs):
+            """Version-tolerant task callback wrapper.
+
+            CrewAI has changed callback invocation signatures over releases.
+            This wrapper extracts the first positional argument when present and
+            prevents callback errors from aborting the whole crew execution.
+            """
+            task_output = args[0] if args else kwargs.get("task_output")
+            try:
+                _on_task_complete(session_id, task_output, agent_task_map, tasks_list)
+            except Exception:
+                logger.exception("Task callback failed for session %s", session_id)
+
         crew = Crew(
             agents=agents_list,
             tasks=tasks_list,
             verbose=True,
-            step_callback=lambda step_output: None,
-            task_callback=lambda task_output: _on_task_complete(
-                session_id, task_output, agent_task_map, tasks_list
-            ),
+            step_callback=_safe_step_callback,
+            task_callback=_safe_task_callback,
         )
 
         result = crew.kickoff()
@@ -344,7 +400,7 @@ def _run_crew_sync(session_id: str, idea: str, tech_stack: str = "", security_fr
 
     except Exception as e:
         logger.exception("Crew execution failed")
-        push_event("error", {"message": str(e)})
+        push_event("error", _build_error_payload(e))
         session["status"] = "error"
         _persist_session(session_id)
 
