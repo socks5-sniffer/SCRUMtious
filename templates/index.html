@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scrumtious – AI Scrum Team</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #0a0a0f;
+            --bg-card: #12121a;
+            --bg-card-hover: #1a1a2e;
+            --border: #1e1e2e;
+            --text: #e4e4e7;
+            --text-muted: #71717a;
+            --text-dim: #52525b;
+            --accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.15);
+            --green: #10b981;
+            --green-glow: rgba(16, 185, 129, 0.15);
+            --amber: #f59e0b;
+            --red: #ef4444;
+            --cyan: #06b6d4;
+            --purple: #8b5cf6;
+            --radius: 16px;
+            --radius-sm: 10px;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Ambient background glow */
+        .bg-glow {
+            position: fixed;
+            top: -30%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 0 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* === HEADER === */
+        header {
+            padding: 48px 0 24px;
+            text-align: center;
+        }
+
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent), var(--purple));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .logo h1 {
+            font-size: 32px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 0%, #a5a5ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 16px;
+            max-width: 500px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        /* === INPUT SECTION === */
+        .input-section {
+            margin: 40px 0;
+        }
+
+        .input-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            transition: border-color 0.3s;
+        }
+
+        .input-card:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px var(--accent-glow);
+        }
+
+        .input-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 16px;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+            min-height: 80px;
+        }
+
+        textarea::placeholder {
+            color: var(--text-dim);
+        }
+
+        .btn-run {
+            flex-shrink: 0;
+            padding: 12px 28px;
+            background: linear-gradient(135deg, var(--accent), var(--purple));
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-run:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-run:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-run svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* === WORKFLOW === */
+        .workflow-section {
+            display: none;
+            margin: 24px 0 60px;
+        }
+
+        .workflow-section.visible {
+            display: block;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+
+        /* Pipeline */
+        .pipeline {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 40px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .pipeline-step {
+            flex: 1;
+            min-width: 120px;
+            text-align: center;
+            padding: 14px 8px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .pipeline-step .step-icon {
+            font-size: 22px;
+            margin-bottom: 6px;
+        }
+
+        .pipeline-step .step-role {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .pipeline-step.waiting {
+            opacity: 0.35;
+        }
+
+        .pipeline-step.active {
+            border-color: var(--accent);
+            background: linear-gradient(180deg, rgba(99, 102, 241, 0.08) 0%, var(--bg-card) 100%);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .pipeline-step.active .step-role {
+            color: var(--accent);
+        }
+
+        .pipeline-step.done {
+            border-color: var(--green);
+            background: linear-gradient(180deg, rgba(16, 185, 129, 0.06) 0%, var(--bg-card) 100%);
+        }
+
+        .pipeline-step.done .step-role {
+            color: var(--green);
+        }
+
+        .pipeline-step.done::after {
+            content: '✓';
+            position: absolute;
+            top: 6px;
+            right: 8px;
+            font-size: 10px;
+            color: var(--green);
+            font-weight: 700;
+        }
+
+        .pipeline-connector {
+            display: flex;
+            align-items: center;
+            color: var(--text-dim);
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        /* Agent cards */
+        .agent-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .agent-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .agent-card.active {
+            border-color: color-mix(in srgb, var(--agent-color) 60%, transparent);
+            box-shadow: 0 4px 24px color-mix(in srgb, var(--agent-color) 10%, transparent);
+        }
+
+        .agent-card.done {
+            border-color: var(--border);
+        }
+
+        .agent-card-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 20px 24px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .agent-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+            transition: all 0.3s;
+        }
+
+        .agent-card.waiting .agent-avatar {
+            background: var(--bg-card-hover);
+        }
+
+        .agent-card.active .agent-avatar {
+            background: color-mix(in srgb, var(--agent-color) 15%, transparent);
+        }
+
+        .agent-card.done .agent-avatar {
+            background: var(--green-glow);
+        }
+
+        .agent-info {
+            flex: 1;
+        }
+
+        .agent-role {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .agent-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .agent-status {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+
+        .agent-card.waiting .agent-status {
+            color: var(--text-dim);
+            background: rgba(82, 82, 91, 0.15);
+        }
+
+        .agent-card.active .agent-status {
+            color: var(--accent);
+            background: var(--accent-glow);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .agent-card.done .agent-status {
+            color: var(--green);
+            background: var(--green-glow);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        /* Agent output panel */
+        .agent-output {
+            display: none;
+            padding: 0 24px 20px;
+        }
+
+        .agent-output.visible {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        .output-content {
+            background: #0d0d14;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 20px;
+            font-size: 13px;
+            line-height: 1.7;
+            max-height: 500px;
+            overflow-y: auto;
+            word-break: break-word;
+        }
+
+        .output-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .output-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .output-content::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        /* === RETRO SECTION === */
+        .retro-section {
+            display: none;
+            margin: 40px 0 80px;
+        }
+
+        .retro-section.visible {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .retro-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+        }
+
+        .retro-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .retro-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(6, 182, 212, 0.15));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .retro-title {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .verdict-badge {
+            margin-left: auto;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .verdict-badge.approved {
+            color: var(--green);
+            background: var(--green-glow);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .verdict-badge.blocked {
+            color: var(--red);
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .verdict-badge.unknown {
+            color: var(--amber);
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .retro-content {
+            font-size: 14px;
+            line-height: 1.8;
+            word-break: break-word;
+        }
+
+        .retro-content h1, .retro-content h2, .retro-content h3 {
+            color: var(--text);
+            margin-top: 20px;
+            margin-bottom: 8px;
+        }
+
+        /* === HUMAN-IN-THE-LOOP APPROVAL === */
+        .hitl-panel {
+            display: none;
+            margin-top: 12px;
+            padding: 16px 20px;
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(245,158,11,0.35);
+            background: rgba(245,158,11,0.06);
+            animation: fadeIn 0.3s ease;
+        }
+        .hitl-panel.visible { display: block; }
+        .hitl-heading {
+            font-size: 12px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.07em;
+            color: var(--amber); margin-bottom: 10px;
+        }
+        .hitl-edit {
+            width: 100%; background: #07070d;
+            border: 1px solid var(--border); color: var(--text);
+            border-radius: var(--radius-sm); padding: 10px 12px;
+            font-family: inherit; font-size: 13px; line-height: 1.6;
+            resize: vertical; min-height: 80px; outline: none;
+            transition: border-color 0.2s; margin-bottom: 10px;
+        }
+        .hitl-edit:focus { border-color: var(--amber); }
+        .hitl-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .btn-approve {
+            padding: 9px 22px; border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, rgba(16,185,129,0.2), rgba(6,182,212,0.2));
+            border: 1px solid rgba(16,185,129,0.4);
+            color: var(--green); font-family: inherit;
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-approve:hover { background: linear-gradient(135deg,rgba(16,185,129,0.3),rgba(6,182,212,0.3)); }
+        .btn-approve:disabled { opacity: 0.45; cursor: not-allowed; }
+        .hitl-hint {
+            font-size: 11.5px; color: var(--text-dim); flex: 1;
+        }
+
+        /* === MARKDOWN BODY === */
+        .md-body { color: var(--text-muted); }
+        .md-body h1, .md-body h2, .md-body h3, .md-body h4 {
+            color: var(--text); font-weight: 600;
+            margin: 14px 0 6px; line-height: 1.3;
+        }
+        .md-body h1 { font-size: 15px; }
+        .md-body h2 { font-size: 14px; }
+        .md-body h3, .md-body h4 { font-size: 13px; }
+        .md-body p { margin: 6px 0; }
+        .md-body ul, .md-body ol { padding-left: 18px; margin: 6px 0; }
+        .md-body li { margin: 3px 0; }
+        .md-body code {
+            background: rgba(99,102,241,0.12); color: #a5b4fc;
+            padding: 1px 5px; border-radius: 4px;
+            font-size: 11.5px; font-family: 'Menlo','Consolas',monospace;
+        }
+        .md-body pre {
+            background: #07070d; border: 1px solid var(--border);
+            border-radius: 8px; padding: 14px; margin: 10px 0; overflow-x: auto;
+        }
+        .md-body pre code { background: none; color: #a5f3fc; padding: 0; font-size: 12px; }
+        .md-body strong { color: var(--text); font-weight: 600; }
+        .md-body em { color: var(--amber); font-style: italic; }
+        .md-body hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+        .md-body blockquote {
+            border-left: 3px solid var(--accent); padding-left: 12px;
+            color: var(--text-dim); margin: 8px 0;
+        }
+        .md-body table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
+        .md-body th {
+            background: rgba(99,102,241,0.1); color: var(--text);
+            padding: 7px 10px; text-align: left; font-weight: 600;
+            border: 1px solid var(--border);
+        }
+        .md-body td { padding: 5px 10px; border: 1px solid var(--border); color: var(--text-muted); }
+        .md-body tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+
+        /* === ERROR STATE === */
+        .agent-card.error .agent-status { color: var(--red); background: rgba(239,68,68,0.1); }
+        .agent-card.error .agent-avatar { background: rgba(239,68,68,0.08); }
+        .pipeline-step.error { border-color: var(--red) !important; opacity: 1; }
+        .pipeline-step.error .step-role { color: var(--red); }
+
+        /* === COPY / DOWNLOAD ACTIONS === */
+        .output-actions {
+            display: flex; justify-content: flex-end;
+            gap: 8px; margin-bottom: 10px;
+        }
+        .btn-icon {
+            display: flex; align-items: center; gap: 5px;
+            background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+            color: var(--text-muted); border-radius: 7px;
+            padding: 5px 12px; font-size: 12px; font-weight: 500;
+            font-family: inherit; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-icon:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+        .btn-icon svg { width: 13px; height: 13px; flex-shrink: 0; }
+        .btn-download-all {
+            display: none; margin: 20px auto 0;
+            padding: 11px 28px;
+            background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(6,182,212,0.15));
+            border: 1px solid rgba(16,185,129,0.3);
+            color: var(--green); border-radius: var(--radius-sm);
+            font-size: 14px; font-weight: 600; font-family: inherit;
+            cursor: pointer; transition: all 0.2s; width: 100%;
+        }
+        .btn-download-all:hover { background: linear-gradient(135deg,rgba(16,185,129,0.25),rgba(6,182,212,0.25)); }
+        .btn-download-all.visible { display: block; animation: fadeIn 0.4s ease; }
+
+        /* === TECH STACK OPTIONS === */
+        .options-row {
+            margin-top: 20px; padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+        .options-grid {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 12px; margin-top: 8px;
+        }
+        .select-label {
+            display: block; font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-dim); margin-bottom: 5px;
+        }
+        .select-field {
+            width: 100%; background: #0d0d14;
+            border: 1px solid var(--border); color: var(--text-muted);
+            border-radius: var(--radius-sm); padding: 8px 10px;
+            font-family: inherit; font-size: 13px; outline: none;
+            transition: border-color 0.2s; cursor: pointer;
+        }
+        .select-field:focus { border-color: var(--accent); color: var(--text); }
+        @media (max-width: 640px) { .options-grid { grid-template-columns: 1fr; } }
+
+        /* === ANIMATIONS === */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(99, 102, 241, 0.3);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Overall progress */
+        .progress-bar {
+            width: 100%;
+            height: 3px;
+            background: var(--border);
+            border-radius: 2px;
+            margin-bottom: 32px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--green));
+            border-radius: 2px;
+            transition: width 0.6s ease;
+            width: 0%;
+        }
+
+        /* Error state */
+        .error-banner {
+            display: none;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: var(--radius-sm);
+            padding: 16px 20px;
+            color: var(--red);
+            font-size: 14px;
+            margin-top: 16px;
+        }
+
+        .error-banner.visible {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .container { padding: 0 16px; }
+            header { padding: 32px 0 16px; }
+            .logo h1 { font-size: 24px; }
+            .input-wrapper { flex-direction: column; }
+            .btn-run { width: 100%; justify-content: center; }
+            .pipeline { gap: 2px; }
+            .pipeline-step { min-width: 60px; padding: 10px 4px; }
+            .pipeline-step .step-role { font-size: 9px; }
+            .pipeline-connector { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-glow"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="logo">
+                <div class="logo-icon">🚀</div>
+                <h1>Scrumtious</h1>
+            </div>
+            <p>AI-powered Scrum team that transforms your ideas into secure, sprint-ready implementations.</p>
+        </header>
+
+        <!-- Input -->
+        <section class="input-section">
+            <div class="input-card">
+                <label class="input-label" for="idea-input">Your Feature Idea</label>
+                <div class="input-wrapper">
+                    <textarea id="idea-input" rows="3" maxlength="2000"
+                        placeholder="Describe your feature idea… e.g. 'Add a temperature sensor dashboard that reads from GPIO pin 4 and displays real-time data on the web interface'"></textarea>
+                    <button class="btn-run" id="btn-run" onclick="startRun()">
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 3l14 9-14 9V3z"/>
+                        </svg>
+                        Run Sprint
+                    </button>
+                </div>
+                <div class="options-row">
+                    <div class="options-grid">
+                        <div>
+                            <label class="select-label" for="tech-stack">Language / Stack</label>
+                            <select id="tech-stack" class="select-field">
+                                <option value="">Auto-detect from idea</option>
+                                <option value="Python / gpiozero (Raspberry Pi GPIO)">Python / gpiozero (Raspberry Pi)</option>
+                                <option value="Python / FastAPI (REST API)">Python / FastAPI</option>
+                                <option value="Python / Flask">Python / Flask</option>
+                                <option value="JavaScript / Node.js">JavaScript / Node.js</option>
+                                <option value="PHP">PHP</option>
+                                <option value="Go">Go</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="select-label" for="security-framework">Security Framework</label>
+                            <select id="security-framework" class="select-field">
+                                <option value="OWASP Top-10">OWASP Top-10 (default)</option>
+                                <option value="SANS Top-25">SANS Top-25</option>
+                                <option value="NIST 800-53">NIST 800-53</option>
+                                <option value="CIS Controls">CIS Controls</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="error-banner" id="error-banner"></div>
+        </section>
+
+        <!-- Workflow -->
+        <section class="workflow-section" id="workflow-section">
+            <div class="section-title">Sprint Pipeline</div>
+
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+
+            <!-- Pipeline mini-steps -->
+            <div class="pipeline" id="pipeline">
+                {% for agent in agents %}
+                <div class="pipeline-step waiting" id="pipe-{{ agent.id }}">
+                    <div class="step-icon">{{ agent.icon }}</div>
+                    <div class="step-role">{{ agent.role }}</div>
+                </div>
+                {% if not loop.last %}
+                <div class="pipeline-connector">→</div>
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            <!-- Agent detail cards -->
+            <div class="section-title">Agent Activity</div>
+            <div class="agent-cards" id="agent-cards">
+                {% for agent in agents %}
+                <div class="agent-card waiting" id="card-{{ agent.id }}" style="--agent-color: {{ agent.color }}">
+                    <div class="agent-card-header" onclick="toggleOutput('{{ agent.id }}')">
+                        <div class="agent-avatar">{{ agent.icon }}</div>
+                        <div class="agent-info">
+                            <div class="agent-role">{{ agent.role }}</div>
+                            <div class="agent-desc">{{ agent.description }}</div>
+                        </div>
+                        <span class="agent-status" id="status-{{ agent.id }}">Waiting</span>
+                    </div>
+                    <div class="agent-output" id="output-{{ agent.id }}">
+                        <div class="output-actions">
+                            <button class="btn-icon" id="copy-{{ agent.id }}" onclick="copyOutput('{{ agent.id }}')">
+                                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                Copy
+                            </button>
+                        </div>
+                        <div class="output-content">
+                            <div class="md-body" id="output-content-{{ agent.id }}">Waiting for agent output…</div>
+                        </div>
+                        {% if not loop.last %}
+                        <div class="hitl-panel" id="hitl-{{ agent.id }}">
+                            <div class="hitl-heading">✋ Review &amp; Approve</div>
+                            <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:10px">
+                                Read the output above. Optionally edit it before the next agent sees it,
+                                then click <strong style="color:var(--green)">Approve &amp; Continue</strong>.
+                            </p>
+                            <textarea class="hitl-edit" id="hitl-edit-{{ agent.id }}"
+                                placeholder="(Optional) Edit the output here before passing it to the next agent…"></textarea>
+                            <div class="hitl-actions">
+                                <button class="btn-approve" id="hitl-btn-{{ agent.id }}"
+                                    onclick="approveStep('{{ agent.id }}')">Approve &amp; Continue →</button>
+                                <span class="hitl-hint">Sprint is paused — next agent won't run until you approve.</span>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Retrospective -->
+        <section class="retro-section" id="retro-section">
+            <div class="section-title">Sprint Retrospective</div>
+            <div class="retro-card">
+                <div class="retro-header">
+                    <div class="retro-icon">📊</div>
+                    <div class="retro-title">Sprint Complete</div>
+                    <span class="verdict-badge" id="verdict-badge"></span>
+                </div>
+                <div class="retro-content">
+                    <div class="md-body" id="retro-content"></div>
+                </div>
+                <button class="btn-download-all" id="btn-download-all" onclick="downloadArtifacts()">
+                    ↓ Download All Artifacts (.md bundle)
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // Configure marked
+        marked.setOptions({ breaks: true, gfm: true });
+
+        const AGENT_ORDER = ['business_analyst', 'product_owner', 'lead_developer', 'security_auditor', 'scrum_master'];
+        let agentOutputs = {};  // raw markdown strings keyed by agent id
+        let currentIdea = '';
+        let currentSessionId = null;
+
+        function toggleOutput(agentId) {
+            const el = document.getElementById(`output-${agentId}`);
+            el.classList.toggle('visible');
+        }
+
+        function setAgentState(agentId, state) {
+            const card = document.getElementById(`card-${agentId}`);
+            const pipe = document.getElementById(`pipe-${agentId}`);
+            const status = document.getElementById(`status-${agentId}`);
+
+            card.className = `agent-card ${state}`;
+            pipe.className = `pipeline-step ${state}`;
+
+            if (state === 'active') {
+                status.innerHTML = '<span class="spinner"></span> Working';
+                document.getElementById(`output-${agentId}`).classList.add('visible');
+                const content = document.getElementById(`output-content-${agentId}`);
+                if (!content.dataset.hasOutput) {
+                    content.innerHTML = '<span style="color:var(--text-dim)">Agent is processing…</span>';
+                }
+            } else if (state === 'done') {
+                status.textContent = 'Complete ✓';
+                // Keep output visible — don't auto-collapse
+            } else if (state === 'error') {
+                status.textContent = 'Error';
+            }
+        }
+
+        function updateProgress() {
+            const doneCount = AGENT_ORDER.filter(id =>
+                document.getElementById(`card-${id}`).classList.contains('done')).length;
+            const activeCount = AGENT_ORDER.filter(id =>
+                document.getElementById(`card-${id}`).classList.contains('active')).length;
+            const pct = ((doneCount + activeCount * 0.5) / AGENT_ORDER.length) * 100;
+            document.getElementById('progress-fill').style.width = `${pct}%`;
+        }
+
+        async function startRun() {
+            const idea = document.getElementById('idea-input').value.trim();
+            if (!idea) return;
+            currentIdea = idea;
+
+            const techStack = document.getElementById('tech-stack').value;
+            const securityFramework = document.getElementById('security-framework').value;
+
+            const btn = document.getElementById('btn-run');
+            btn.disabled = true;
+
+            document.getElementById('error-banner').classList.remove('visible');
+
+            // Reset all agents
+            AGENT_ORDER.forEach(id => {
+                setAgentState(id, 'waiting');
+                const content = document.getElementById(`output-content-${id}`);
+                content.innerHTML = 'Waiting for agent output…';
+                delete content.dataset.hasOutput;
+                document.getElementById(`output-${id}`).classList.remove('visible');
+            });
+            agentOutputs = {};
+            document.getElementById('progress-fill').style.width = '0%';
+            document.getElementById('workflow-section').classList.add('visible');
+            document.getElementById('retro-section').classList.remove('visible');
+            document.getElementById('btn-download-all').classList.remove('visible');
+
+            // Reset HITL panels
+            AGENT_ORDER.forEach(id => {
+                const hitl = document.getElementById(`hitl-${id}`);
+                if (hitl) {
+                    hitl.classList.remove('visible');
+                    const btn = document.getElementById(`hitl-btn-${id}`);
+                    if (btn) { btn.disabled = false; btn.textContent = 'Approve & Continue →'; }
+                    const edit = document.getElementById(`hitl-edit-${id}`);
+                    if (edit) edit.value = '';
+                }
+            });
+
+            try {
+                const res = await fetch('/api/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ idea, tech_stack: techStack, security_framework: securityFramework }),
+                });
+
+                const data = await res.json();
+                if (!res.ok || data.error) {
+                    showError(data.error || 'Failed to start the sprint.');
+                    btn.disabled = false;
+                    return;
+                }
+
+                currentSessionId = data.session_id;
+                listenToEvents(data.session_id);
+            } catch (err) {
+                showError('Failed to start the sprint. Check that the server is running.');
+                btn.disabled = false;
+            }
+        }
+
+        function listenToEvents(sessionId) {
+            const evtSource = new EventSource(`/api/stream/${sessionId}`);
+
+            evtSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                switch (data.type) {
+                    case 'agent_start':
+                        setAgentState(data.agent, 'active');
+                        updateProgress();
+                        // Hide any open HITL panel for the PREVIOUS agent
+                        const PREV_IDX = AGENT_ORDER.indexOf(data.agent) - 1;
+                        if (PREV_IDX >= 0) {
+                            const prevHitl = document.getElementById(`hitl-${AGENT_ORDER[PREV_IDX]}`);
+                            if (prevHitl) prevHitl.classList.remove('visible');
+                        }
+                        document.getElementById(`card-${data.agent}`).scrollIntoView({
+                            behavior: 'smooth', block: 'center'
+                        });
+                        break;
+
+                    case 'agent_complete':
+                        setAgentState(data.agent, 'done');
+                        if (data.output) {
+                            agentOutputs[data.agent] = data.output;
+                            const content = document.getElementById(`output-content-${data.agent}`);
+                            content.innerHTML = marked.parse(data.output);
+                            content.dataset.hasOutput = '1';
+                            // Pre-fill HITL edit textarea with agent output
+                            const editArea = document.getElementById(`hitl-edit-${data.agent}`);
+                            if (editArea) editArea.value = data.output;
+                        }
+                        updateProgress();
+                        // Show approval panel if this agent expects approval
+                        if (data.needs_approval) {
+                            const hitl = document.getElementById(`hitl-${data.agent}`);
+                            if (hitl) hitl.classList.add('visible');
+                        }
+                        break;
+
+                    case 'agent_edited':
+                        // User submitted an edit — update the rendered output
+                        if (data.output) {
+                            agentOutputs[data.agent] = data.output;
+                            const c = document.getElementById(`output-content-${data.agent}`);
+                            if (c) c.innerHTML = marked.parse(data.output);
+                        }
+                        break;
+
+                    case 'complete':
+                        document.getElementById('progress-fill').style.width = '100%';
+                        showRetro(data.result, data.verdict);
+                        document.getElementById('btn-run').disabled = false;
+                        evtSource.close();
+                        break;
+
+                    case 'error':
+                        // Mark the currently-active agent as errored
+                        AGENT_ORDER.forEach(id => {
+                            if (document.getElementById(`card-${id}`).classList.contains('active')) {
+                                setAgentState(id, 'error');
+                            }
+                        });
+                        showError(data.message || 'An error occurred during the sprint.');
+                        document.getElementById('btn-run').disabled = false;
+                        evtSource.close();
+                        break;
+                }
+            };
+
+            evtSource.onerror = () => {
+                evtSource.close();
+                document.getElementById('btn-run').disabled = false;
+            };
+        }
+
+        function showRetro(result, verdict) {
+            const section = document.getElementById('retro-section');
+            const badge = document.getElementById('verdict-badge');
+            const content = document.getElementById('retro-content');
+
+            const retroText = agentOutputs['scrum_master'] || result || 'No retrospective output available.';
+
+            verdict = (verdict || 'UNKNOWN').toUpperCase();
+            badge.textContent = verdict;
+            badge.className = 'verdict-badge ' + verdict.toLowerCase();
+
+            content.innerHTML = marked.parse(retroText);
+
+            section.classList.add('visible');
+            document.getElementById('btn-download-all').classList.add('visible');
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        async function approveStep(agentId) {
+            const btn = document.getElementById(`hitl-btn-${agentId}`);
+            const editArea = document.getElementById(`hitl-edit-${agentId}`);
+            if (!currentSessionId || !btn) return;
+
+            // Only send an edit payload if the user actually changed the text
+            const originalText = agentOutputs[agentId] || '';
+            const editedText = editArea ? editArea.value : '';
+            const body = {};
+            if (editedText && editedText !== originalText) {
+                body.edit = editedText;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Continuing…';
+
+            try {
+                const res = await fetch(`/api/approve/${currentSessionId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (!res.ok) {
+                    const d = await res.json();
+                    showError(d.error || 'Could not approve step.');
+                    btn.disabled = false;
+                    btn.textContent = 'Approve & Continue →';
+                }
+                // Panel hides itself when 'agent_start' event arrives for the next agent
+            } catch (err) {
+                showError('Failed to communicate with server.');
+                btn.disabled = false;
+                btn.textContent = 'Approve & Continue →';
+            }
+        }
+
+        function copyOutput(agentId) {
+            const raw = agentOutputs[agentId];
+            if (!raw) return;
+            navigator.clipboard.writeText(raw).then(() => {
+                const btn = document.getElementById(`copy-${agentId}`);
+                const orig = btn.innerHTML;
+                btn.innerHTML = '✓ Copied';
+                btn.style.color = 'var(--green)';
+                setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; }, 2000);
+            });
+        }
+
+        function downloadArtifacts() {
+            const agentLabels = {
+                business_analyst: '## 📋 Business Analyst – Requirements\n\n',
+                product_owner:    '## 🎯 Product Owner – User Story\n\n',
+                lead_developer:   '## ⚡ Lead Developer – Implementation\n\n',
+                security_auditor: '## 🛡️ Security Auditor – Audit Report\n\n',
+                scrum_master:     '## 🔄 Scrum Master – Retrospective\n\n',
+            };
+            const parts = [`# Scrumtious Sprint Artifacts\n\n**Idea:** ${currentIdea}\n\n---\n\n`];
+            AGENT_ORDER.forEach(id => {
+                if (agentOutputs[id]) {
+                    parts.push(agentLabels[id] + agentOutputs[id] + '\n\n---\n\n');
+                }
+            });
+            const blob = new Blob([parts.join('')], { type: 'text/markdown' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'scrumtious-artifacts.md';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+
+        function showError(message) {
+            const banner = document.getElementById('error-banner');
+            banner.textContent = message;
+            banner.classList.add('visible');
+        }
+
+        // Ctrl+Enter to submit
+        document.getElementById('idea-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                startRun();
+            }
+        });
+
+        // Live char counter hint
+        document.getElementById('idea-input').addEventListener('input', function() {
+            const remaining = 2000 - this.value.length;
+            if (remaining < 200) {
+                this.style.color = remaining < 50 ? 'var(--red)' : 'var(--amber)';
+            } else {
+                this.style.color = '';
+            }
+        });
+    </script>
+</body>
+</html>

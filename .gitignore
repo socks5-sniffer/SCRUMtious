@@ -1,0 +1,37 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Sessions (runtime data, not source)
+sessions/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node (package-lock may exist from tooling)
+node_modules/
+package-lock.json
+
+# IDE
+.vscode/settings.json
+.idea/
