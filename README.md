@@ -15,6 +15,8 @@ Powered by [CrewAI](https://github.com/joaomdmoura/crewAI) · [Google Gemini](ht
 3. Every agent's work streams live to the UI as it completes.
 4. You get a full artifact bundle: requirements doc, user story, code, security audit, and sprint retrospective — all downloadable as a single Markdown file.
 
+![SCRUMtious UI](public/images/Screenshot%202026-05-09%20001530.png)
+
 ---
 
 ## The Agent Pipeline
