@@ -1105,7 +1105,8 @@
                 security_auditor: '## 🛡️ Security Auditor – Audit Report\n\n',
                 scrum_master:     '## 🔄 Scrum Master – Retrospective\n\n',
             };
-            const parts = [`# Scrumtious Sprint Artifacts\n\n**Idea:** ${currentIdea}\n\n---\n\n`];
+            const generatedAtUtc = new Date().toISOString().replace('T', ' ').replace('Z', ' UTC');
+            const parts = [`# Scrumtious Sprint Artifacts\n\n**Idea:** ${currentIdea}\n\n**Generated At (UTC):** ${generatedAtUtc}\n\n---\n\n`];
             AGENT_ORDER.forEach(id => {
                 if (agentOutputs[id]) {
                     parts.push(agentLabels[id] + agentOutputs[id] + '\n\n---\n\n');

@@ -197,6 +197,14 @@ def _run_crew_sync(session_id: str, idea: str, tech_stack: str = "", security_fr
     from crewai import Agent, Crew, Task, LLM
 
     session = _sessions[session_id]
+    current_datetime_utc = datetime.now(timezone.utc)
+    current_datetime_label = current_datetime_utc.strftime("%Y-%m-%d %H:%M:%S UTC")
+    current_date_context = (
+        f"Current UTC date and time: {current_datetime_label}. "
+        "Use this current date/time for any headers, metadata, timestamps, sprint periods, "
+        "retrospective dates, or action-item due dates that you include. "
+        "Do not use placeholder/example dates or prior-year dates such as 2023 unless the user explicitly asks for them."
+    )
 
     gemini_model = os.getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
     gemini_llm = LLM(
@@ -301,7 +309,8 @@ def _run_crew_sync(session_id: str, idea: str, tech_stack: str = "", security_fr
             description=(
                 f"A new feature idea has arrived: '{idea}'.{stack_context} Transform it into a "
                 "structured requirements document with user stories, acceptance "
-                "criteria, edge cases, and any relevant safety or integration notes."
+                "criteria, edge cases, and any relevant safety or integration notes. "
+                f"{current_date_context}"
             ),
             expected_output="A structured requirements document with user stories and acceptance criteria.",
             agent=business_analyst,
@@ -311,7 +320,8 @@ def _run_crew_sync(session_id: str, idea: str, tech_stack: str = "", security_fr
             description=(
                 "Review the Business Analyst's requirements and create a sprint-ready "
                 "user story with acceptance criteria, technical details, security notes, "
-                "and learning objectives."
+                "and learning objectives. "
+                f"{current_date_context}"
             ),
             expected_output="A complete sprint-ready user story.",
             agent=product_owner,
@@ -322,7 +332,7 @@ def _run_crew_sync(session_id: str, idea: str, tech_stack: str = "", security_fr
             description=(
                 f"Using the user story, write the implementation.{stack_context} "
                 "Sanitise inputs, use specific exception types, never use eval(), and "
-                f"follow {security_context} Secure Coding Practices."
+                f"follow {security_context} Secure Coding Practices. {current_date_context}"
             ),
             expected_output="Complete, commented source code with security measures applied.",
             agent=lead_developer,
@@ -333,7 +343,7 @@ def _run_crew_sync(session_id: str, idea: str, tech_stack: str = "", security_fr
             description=(
                 f"Perform a security audit of the implementation using the {security_context} framework. "
                 "Verify least privilege, reject eval()/exec()/shell=True/bare excepts. "
-                "Produce a structured audit report with APPROVED or BLOCKED verdict."
+                f"Produce a structured audit report with APPROVED or BLOCKED verdict. {current_date_context}"
             ),
             expected_output="A structured security audit report with a final verdict.",
             agent=security_auditor,
@@ -344,7 +354,7 @@ def _run_crew_sync(session_id: str, idea: str, tech_stack: str = "", security_fr
             description=(
                 "Review all outputs and produce a sprint retrospective with: what went "
                 "well, blockers, at least 3 process improvements, prioritised action "
-                "items with owners, and sprint-goal verdict."
+                f"items with owners, and sprint-goal verdict. {current_date_context}"
             ),
             expected_output="A structured sprint retrospective report.",
             agent=scrum_master,
