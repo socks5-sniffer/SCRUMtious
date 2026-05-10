@@ -1,5 +1,5 @@
 """
-Scrumtious – Web Frontend for AI Scrum Team Orchestration
+SCRUMtious – Web Frontend for AI Scrum Team Orchestration
 =========================================================
 FastAPI server that wraps the CrewAI workflow, streams agent progress
 via Server-Sent Events, and serves a modern single-page UI.
