@@ -1,0 +1,296 @@
+name: "OWASP Top 10 Security Scan"
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    # Run weekly on Mondays at 09:00 UTC
+    - cron: "0 9 * * 1"
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # A06:2021 – Vulnerable and Outdated Components
+  # pip-audit checks every pinned package against the OSV / PyPI Advisory DB
+  # ---------------------------------------------------------------------------
+  dependency-security-scan:
+    name: "Dependency Vulnerability Scan (pip-audit)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit (human-readable)
+        run: pip-audit -r requirements.txt
+        continue-on-error: true
+
+      - name: Run pip-audit (JSON report)
+        run: pip-audit -r requirements.txt -f json -o pip-audit-report.json
+        continue-on-error: true
+
+      - name: Upload pip-audit report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        if: always()
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # A06:2021 – Vulnerable and Outdated Components
+  # A08:2021 – Software and Data Integrity Failures
+  # OWASP Dependency-Check covers CVE databases beyond PyPI advisories
+  # ---------------------------------------------------------------------------
+  owasp-dependency-check:
+    name: "OWASP Dependency-Check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Run OWASP Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@1e54355a8b4c8abaa8cc7d0b70aa655a3bb15a6c # main
+        id: depcheck
+        with:
+          project: "SCRUMtious"
+          path: "."
+          format: "HTML"
+          args: >
+            --enableRetired
+            --enableExperimental
+            --failOnCVSS 7
+
+      - name: Upload Dependency-Check results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        if: always()
+        with:
+          name: dependency-check-report
+          path: ${{ github.workspace }}/reports
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # A03:2021 – Injection
+  # A01:2021 – Broken Access Control
+  # A04:2021 – Insecure Design
+  # Bandit is the standard Python static security linter — checks for eval(),
+  # shell injection, weak crypto, hardcoded passwords, insecure deserialization
+  # ---------------------------------------------------------------------------
+  bandit-security:
+    name: "Bandit Static Security Analysis"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Run Bandit (human-readable, medium+ severity)
+        run: bandit -r app.py versions/ -ll || true
+
+      - name: Run Bandit (JSON report)
+        run: bandit -r app.py versions/ -f json -o bandit-report.json -ll
+        continue-on-error: true
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        if: always()
+        with:
+          name: bandit-security-report
+          path: bandit-report.json
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # A05:2021 – Security Misconfiguration
+  # A01:2021 – Broken Access Control
+  # Verifies critical FastAPI security settings that must always be present:
+  #   - Swagger/ReDoc UI disabled (no API schema leakage in production)
+  #   - Startup env-var validation (fail-fast on missing secrets)
+  #   - Input length cap present (DoS / injection surface reduction)
+  #   - .env file not committed
+  # ---------------------------------------------------------------------------
+  security-config-check:
+    name: "FastAPI Security Configuration Check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Verify security configuration in app.py
+        run: |
+          set -e
+          FAIL=0
+
+          echo "── Checking FastAPI security configuration ──"
+
+          # Swagger UI must be disabled to prevent API schema exposure
+          if grep -q "docs_url=None" app.py; then
+            echo "✓ Swagger UI disabled (docs_url=None)"
+          else
+            echo "✗ FAIL: Swagger UI not disabled — add docs_url=None to FastAPI()"
+            FAIL=1
+          fi
+
+          # ReDoc UI must also be disabled
+          if grep -q "redoc_url=None" app.py; then
+            echo "✓ ReDoc UI disabled (redoc_url=None)"
+          else
+            echo "✗ FAIL: ReDoc UI not disabled — add redoc_url=None to FastAPI()"
+            FAIL=1
+          fi
+
+          # Startup environment-variable validation must be present
+          if grep -q "_REQUIRED_ENV_VARS" app.py; then
+            echo "✓ Startup env-var validation present"
+          else
+            echo "✗ FAIL: No startup env-var validation found"
+            FAIL=1
+          fi
+
+          # Input length enforcement must be present (DoS / injection mitigation)
+          if grep -qE "len\(.+\) > [0-9]+" app.py; then
+            echo "✓ Input length validation present"
+          else
+            echo "⚠ Warning: No input length cap detected in app.py"
+          fi
+
+          # The .env file must never be committed
+          if [ -f ".env" ]; then
+            echo "✗ FAIL: .env file is committed to the repository!"
+            FAIL=1
+          else
+            echo "✓ No .env file committed"
+          fi
+
+          # Confirm .env is covered by .gitignore
+          if grep -q "^\.env" .gitignore 2>/dev/null || grep -q "^\.env$" .gitignore 2>/dev/null; then
+            echo "✓ .env is listed in .gitignore"
+          else
+            echo "⚠ Warning: .env may not be in .gitignore — verify manually"
+          fi
+
+          # Warn if no HTTP security-headers middleware is configured
+          if grep -qE "X-Frame-Options|X-Content-Type|SecurityMiddleware|TrustedHostMiddleware" app.py; then
+            echo "✓ Security headers middleware detected"
+          else
+            echo "⚠ Warning: No security-headers middleware found."
+            echo "  Consider adding Starlette SecurityHeadersMiddleware or"
+            echo "  a reverse-proxy (nginx/Caddy) that sets X-Frame-Options,"
+            echo "  X-Content-Type-Options, and Content-Security-Policy."
+          fi
+
+          echo ""
+          if [ "$FAIL" -eq "1" ]; then
+            echo "Security configuration check FAILED — see items above."
+            exit 1
+          else
+            echo "Security configuration check passed."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # A07:2021 – Identification and Authentication Failures
+  # Gitleaks detects secrets, API keys, and credentials in git history
+  # ---------------------------------------------------------------------------
+  secrets-scan:
+    name: "Secrets Detection (Gitleaks)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+        with:
+          fetch-depth: 0 # Full history required for commit-range scanning
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  # ---------------------------------------------------------------------------
+  # A04:2021 – Insecure Design
+  # mypy enforces Python type annotations; untyped code hides logic errors
+  # that can become security bugs (e.g. None dereferences, implicit coercions)
+  # ---------------------------------------------------------------------------
+  python-type-check:
+    name: "Python Type Safety Check (mypy)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies and mypy
+        run: |
+          pip install -r requirements.txt
+          pip install mypy
+
+      - name: Run mypy type check
+        run: mypy app.py --ignore-missing-imports --no-error-summary
+        continue-on-error: true
+
+  # ---------------------------------------------------------------------------
+  # Summary: collects results from all jobs and writes a step summary table
+  # ---------------------------------------------------------------------------
+  security-summary:
+    name: "Security Scan Summary"
+    runs-on: ubuntu-latest
+    needs:
+      - dependency-security-scan
+      - owasp-dependency-check
+      - bandit-security
+      - security-config-check
+      - secrets-scan
+      - python-type-check
+    if: always()
+    steps:
+      - name: Generate security summary
+        run: |
+          echo "# OWASP Top 10 Security Scan Summary – SCRUMtious" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Scan Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| OWASP Category | Scan Tool | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------------|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| A01:2021 – Broken Access Control | Config Check + Bandit | ${{ needs.security-config-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| A02:2021 – Cryptographic Failures | Gitleaks + Bandit | ${{ needs.secrets-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| A03:2021 – Injection | Bandit (eval/shell/regex) | ${{ needs.bandit-security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| A04:2021 – Insecure Design | mypy + Bandit | ${{ needs.python-type-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| A05:2021 – Security Misconfiguration | FastAPI Config Check | ${{ needs.security-config-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| A06:2021 – Vulnerable Components | pip-audit + OWASP DC | ${{ needs.dependency-security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| A07:2021 – Identification/Auth Failures | Gitleaks | ${{ needs.secrets-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| A08:2021 – Software/Data Integrity | OWASP Dependency-Check | ${{ needs.owasp-dependency-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| A09:2021 – Logging/Monitoring Failures | CodeQL (separate workflow) | N/A |" >> $GITHUB_STEP_SUMMARY
+          echo "| A10:2021 – SSRF | Bandit + CodeQL | ${{ needs.bandit-security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Tool Notes" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **CodeQL** (Python) runs separately via \`.github/workflows/codeql.yml\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **pip-audit** checks \`requirements.txt\` against OSV / PyPI Advisory Database" >> $GITHUB_STEP_SUMMARY
+          echo "- **OWASP Dependency-Check** scans for CVEs across all dependency graphs" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bandit** performs Python-specific static analysis for injection, crypto, and shell issues" >> $GITHUB_STEP_SUMMARY
+          echo "- **Gitleaks** scans full git history for committed secrets and API keys" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dependabot** auto-raises PRs for outdated pip packages (see \`dependabot.yml\`)" >> $GITHUB_STEP_SUMMARY
