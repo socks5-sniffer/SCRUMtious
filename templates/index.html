@@ -607,6 +607,17 @@
         }
         .btn-download-all:hover { background: linear-gradient(135deg,rgba(16,185,129,0.25),rgba(6,182,212,0.25)); }
         .btn-download-all.visible { display: block; animation: fadeIn 0.4s ease; }
+        .btn-download-pdf {
+            display: none; margin: 10px auto 0;
+            padding: 11px 28px;
+            background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.15));
+            border: 1px solid rgba(99,102,241,0.3);
+            color: var(--accent); border-radius: var(--radius-sm);
+            font-size: 14px; font-weight: 600; font-family: inherit;
+            cursor: pointer; transition: all 0.2s; width: 100%;
+        }
+        .btn-download-pdf:hover { background: linear-gradient(135deg,rgba(99,102,241,0.25),rgba(139,92,246,0.25)); }
+        .btn-download-pdf.visible { display: block; animation: fadeIn 0.4s ease; }
 
         /* === TECH STACK OPTIONS === */
         .options-row {
@@ -844,6 +855,9 @@
                 <button class="btn-download-all" id="btn-download-all" onclick="downloadArtifacts()">
                     ↓ Download All Artifacts (.md bundle)
                 </button>
+                <button class="btn-download-pdf" id="btn-download-pdf" onclick="downloadPdf()">
+                    ↓ Export Sprint Report (.pdf)
+                </button>
             </div>
         </section>
     </div>
@@ -920,6 +934,7 @@
             document.getElementById('workflow-section').classList.add('visible');
             document.getElementById('retro-section').classList.remove('visible');
             document.getElementById('btn-download-all').classList.remove('visible');
+            document.getElementById('btn-download-pdf').classList.remove('visible');
 
             // Reset HITL panels
             AGENT_ORDER.forEach(id => {
@@ -1046,6 +1061,7 @@
 
             section.classList.add('visible');
             document.getElementById('btn-download-all').classList.add('visible');
+            document.getElementById('btn-download-pdf').classList.add('visible');
             section.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
@@ -1095,6 +1111,11 @@
                 btn.style.color = 'var(--green)';
                 setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; }, 2000);
             });
+        }
+
+        function downloadPdf() {
+            if (!currentSessionId) return;
+            window.location.href = `/api/sessions/${currentSessionId}/pdf`;
         }
 
         function downloadArtifacts() {

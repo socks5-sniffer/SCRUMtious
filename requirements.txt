@@ -3,3 +3,5 @@ python-dotenv
 fastapi
 uvicorn[standard]
 jinja2
+markdown
+xhtml2pdf
