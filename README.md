@@ -2,7 +2,7 @@
 
 > Transform any feature idea into a full sprint cycle — requirements, user story, implementation, security audit, and retrospective — in one pipeline.
 
-Scrumtious is a standalone **web application** that orchestrates five specialised AI agents through a complete Agile sprint workflow. Give it any feature idea and it returns a production-ready artifact bundle — requirements, user story, implementation, security audit, and retrospective.
+Scrumtious is a standalone **web application** that orchestrates five specialised AI agents through a complete Agile sprint workflow. Give it any feature idea and it returns a production-ready artifact bundle while keeping a human in the loop between each stage.
 
 Powered by [CrewAI](https://github.com/joaomdmoura/crewAI) · [Google Gemini](https://aistudio.google.com) · [FastAPI](https://fastapi.tiangolo.com) · Python 3.11+
 
@@ -92,20 +92,36 @@ Your Idea
 
 ```
 scrumtious/
-├── app.py                  # FastAPI server — SSE streaming, session management, crew orchestration
+├── .github/
+│   ├── ISSUE_TEMPLATE/
+│   │   ├── bug_report.yml       # Bug report issue form
+│   │   ├── config.yml           # Issue template configuration
+│   │   └── feature_request.yml  # Feature request issue form
+│   ├── workflows/
+│   │   └── codeql.yml           # GitHub Actions CodeQL security analysis workflow
+│   ├── dependabot.yml           # Dependabot update configuration
+│   └── PULL_REQUEST_TEMPLATE.md # Pull request template
+├── app.py                       # FastAPI server — SSE streaming, session management, crew orchestration
 ├── templates/
-│   └── index.html          # Single-page UI (vanilla JS, marked.js, Inter font)
-├── static/                 # Static assets (served at /static)
-├── sessions/               # JSON session store (auto-created; gitignored)
+│   └── index.html               # Single-page UI (vanilla JS, marked.js, Inter font)
+├── static/                      # Static assets (served at /static)
+├── public/                      # Images and other public-facing assets
+├── sessions/                    # JSON session store (auto-created; gitignored)
 ├── data/
-│   └── sprint-artifacts/   # Sample sprint output artifacts
+│   └── sprint-artifacts/        # Sample sprint output artifacts
 ├── versions/
-│   ├── scrumtious.py       # Original standalone CLI script (full pipeline with Firebase sync)
-│   └── scrumtious_clean.py # Simplified CLI version
-├── .env                    # Your local secrets (never committed)
-├── .env.example            # Template for required environment variables
-├── requirements.txt        # Python dependencies
-└── .gitignore
+│   ├── scrumtious.py            # Original standalone CLI script (full pipeline with Firebase sync)
+│   └── scrumtious_clean.py      # Simplified CLI version
+├── .env                         # Your local secrets (never committed)
+├── .env.example                 # Template for required environment variables
+├── .gitignore
+├── CODE_OF_CONDUCT.md           # Community standards and expectations
+├── CONTRIBUTING.md              # Contribution guidelines
+├── LICENSE
+├── README.md
+├── SECURITY.md                  # Security policy and reporting guidance
+├── package-lock.json            # npm lockfile for frontend tooling/assets
+└── requirements.txt            # Python dependencies
 ```
 
 ---
@@ -202,7 +218,7 @@ Open **http://127.0.0.1:8000** in your browser.
 - Each sprint run creates a UUID-keyed session in an in-memory dict **and immediately writes it to `sessions/<id>.json`**.
 - The CrewAI crew runs in a **background thread** (blocking I/O) so the async FastAPI event loop stays free.
 - Agent progress is pushed to the session's event queue by a `task_callback` and consumed by the `/api/stream/{session_id}` SSE endpoint.
-- **Human-in-the-loop**: after every agent (except the last) the background thread blocks on a `threading.Event`. The UI shows an approval panel; when the user clicks *Approve & Continue* (optionally with edits), `POST /api/approve/{session_id}` unblocks the thread and the next agent runs.
+- **Human-in-the-loop**: after every agent (except the last) the background thread blocks on a `threading.Event`. The UI shows an approval panel; when the user clicks *Approve & Continue* (optionally after editing), the pipeline resumes.
 - Approved edits are re-emitted as `agent_edited` SSE events so the UI updates the rendered output.
 - `task_output.raw` is used to extract clean text from `TaskOutput` objects.
 - Completed sessions persist to disk and are re-loaded into memory on startup.
@@ -213,13 +229,13 @@ Open **http://127.0.0.1:8000** in your browser.
 - No framework — plain HTML, CSS custom properties, and vanilla JavaScript.
 - `marked.js` (CDN) renders all agent output as HTML.
 - `EventSource` drives the live feed; the connection stays open during HITL pauses and closes automatically when the session completes or errors.
-- After each agent completes (except the Scrum Master), an **amber approval panel** slides open showing the agent's full output pre-filled into an edit textarea. The user can read, edit, and then click *Approve & Continue*.
+- After each agent completes (except the Scrum Master), an **amber approval panel** slides open showing the agent's full output pre-filled into an edit textarea. The user can read, edit, and then continue the sprint.
 - When the server confirms the approval, the `agent_start` SSE event for the next agent hides the panel automatically.
 - `downloadArtifacts()` assembles a labelled Markdown document client-side and triggers a native download — no server roundtrip.
 
 ### `scrumtious.py` — Original CLI
 
-The original standalone script includes an extended pipeline with a **remediation loop**: if the Security Auditor returns `BLOCKED`, the Lead Developer reworks the code and a re-audit runs before the Scrum Master's retrospective. It also includes a `sync_project_board_to_firebase()` placeholder for Firestore integration.
+The original standalone script includes an extended pipeline with a **remediation loop**: if the Security Auditor returns `BLOCKED`, the Lead Developer reworks the code and a re-audit runs before the Scrum Master retrospective is generated.
 
 ---
 
