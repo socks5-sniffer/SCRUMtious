@@ -207,6 +207,8 @@ Open **http://127.0.0.1:8000** in your browser.
 | OWASP Top 10 | Explicitly checked in Security Auditor task for all 2021 categories |
 | Principle of Least Privilege | Verified as a mandatory step in every audit |
 | Input validation | Idea input capped at 2,000 characters server-side; `JSONResponse` enforces proper HTTP error codes |
+| Session access control | `POST /api/run` returns a per-session token that must be provided to stream, approve, and export that session |
+| Output rendering safety | Markdown is sanitized with DOMPurify before HTML rendering to reduce XSS risk |
 | No hard-coded secrets | All keys loaded from environment; `.env` is in `.gitignore` |
 
 ---
@@ -223,6 +225,7 @@ Open **http://127.0.0.1:8000** in your browser.
 - `task_output.raw` is used to extract clean text from `TaskOutput` objects.
 - Completed sessions persist to disk and are re-loaded into memory on startup.
 - API endpoints: `GET /api/sessions`, `GET /api/sessions/{id}`, `POST /api/approve/{id}`.
+- Protected session endpoints require a per-session token (`token` query parameter) returned by `POST /api/run`.
 
 ### `templates/index.html` — Single-page UI
 

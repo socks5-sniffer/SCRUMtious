@@ -6,15 +6,19 @@ via Server-Sent Events, and serves a modern single-page UI.
 """
 
 import asyncio
+import hmac
 import io
 import json
 import logging
 import os
 import pathlib
 import re
+import secrets
 import threading
+import time
 import traceback
 import uuid
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from typing import Any
 
@@ -44,6 +48,63 @@ if _missing:
 app = FastAPI(title="Scrumtious", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: blob:; "
+        "connect-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'; "
+        "form-action 'self'"
+    ),
+}
+
+_RUN_RATE_LIMIT_PER_MINUTE = int(os.getenv("RUN_RATE_LIMIT_PER_MINUTE", "5"))
+_run_rate_limit: dict[str, deque[float]] = defaultdict(deque)
+_run_rate_limit_lock = threading.Lock()
+
+
+def _is_local_request(request: Request) -> bool:
+    host = request.client.host if request.client else ""
+    return host in {"127.0.0.1", "::1", "localhost"}
+
+
+def _session_token_valid(session: dict[str, Any], token: str | None) -> bool:
+    expected = str(session.get("access_token") or "")
+    provided = str(token or "")
+    if not expected or not provided:
+        return False
+    return hmac.compare_digest(expected, provided)
+
+
+def _consume_run_token(client_id: str) -> bool:
+    now = time.time()
+    with _run_rate_limit_lock:
+        window = _run_rate_limit[client_id]
+        while window and (now - window[0]) > 60:
+            window.popleft()
+        if len(window) >= _RUN_RATE_LIMIT_PER_MINUTE:
+            return False
+        window.append(now)
+        return True
+
+
+@app.middleware("http")
+async def set_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for key, value in _SECURITY_HEADERS.items():
+        response.headers.setdefault(key, value)
+    if request.url.scheme == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -79,6 +140,7 @@ def _persist_session(session_id: str) -> None:
         "verdict": session.get("verdict", ""),
         # HITL: which agent is awaiting approval right now
         "pending_approval": session.get("pending_approval", None),
+        "access_token": session.get("access_token", ""),
     }
     try:
         _session_path(session_id).write_text(
@@ -188,8 +250,6 @@ def _build_error_payload(exc: Exception) -> dict[str, str]:
         "message": message,
         "error_type": type(exc).__name__,
         "hint": hint,
-        "raw_error": raw_message,
-        "traceback": traceback.format_exc(),
     }
 
 
@@ -494,6 +554,13 @@ async def start_run(request: Request):
     idea = body.get("idea", "").strip()
     tech_stack = body.get("tech_stack", "").strip()
     security_framework = body.get("security_framework", "OWASP Top-10").strip()
+    client_id = request.client.host if request.client else "unknown"
+
+    if not _consume_run_token(client_id):
+        return JSONResponse(
+            status_code=429,
+            content={"error": "Rate limit exceeded. Please wait before starting another sprint."},
+        )
 
     if not idea:
         return JSONResponse(status_code=400, content={"error": "Please provide an idea"})
@@ -501,6 +568,7 @@ async def start_run(request: Request):
         return JSONResponse(status_code=400, content={"error": "Idea must be 2000 characters or fewer"})
 
     session_id = str(uuid.uuid4())
+    session_token = secrets.token_urlsafe(32)
     _sessions[session_id] = {
         "status": "running",
         "events": [],
@@ -512,6 +580,7 @@ async def start_run(request: Request):
         "outputs": {},
         "verdict": "",
         "pending_approval": None,
+        "access_token": session_token,
         "_hitl_event": threading.Event(),
         "_hitl_edit": None,
     }
@@ -524,13 +593,16 @@ async def start_run(request: Request):
     )
     thread.start()
 
-    return JSONResponse(content={"session_id": session_id})
+    return JSONResponse(content={"session_id": session_id, "session_token": session_token})
 
 
 @app.get("/api/stream/{session_id}")
-async def stream_events(session_id: str):
-    if session_id not in _sessions:
-        return {"error": "Session not found"}, 404
+async def stream_events(session_id: str, token: str = ""):
+    session = _sessions.get(session_id)
+    if not session:
+        return JSONResponse(status_code=404, content={"error": "Session not found"})
+    if not _session_token_valid(session, token):
+        return JSONResponse(status_code=403, content={"error": "Forbidden"})
 
     async def event_generator():
         last_idx = 0
@@ -568,13 +640,15 @@ async def stream_events(session_id: str):
 
 
 @app.post("/api/approve/{session_id}")
-async def approve_step(session_id: str, request: Request):
+async def approve_step(session_id: str, request: Request, token: str = ""):
     """Human-in-the-loop: approve the current agent output and continue the sprint.
     Optionally pass {"edit": "revised text"} to override the output before continuing.
     """
     session = _sessions.get(session_id)
     if not session:
         return JSONResponse(status_code=404, content={"error": "Session not found"})
+    if not _session_token_valid(session, token):
+        return JSONResponse(status_code=403, content={"error": "Forbidden"})
     if session.get("status") != "awaiting_approval":
         return JSONResponse(status_code=409, content={"error": "Session is not awaiting approval"})
 
@@ -597,8 +671,10 @@ async def approve_step(session_id: str, request: Request):
 
 
 @app.get("/api/sessions")
-async def list_sessions():
+async def list_sessions(request: Request):
     """Return a list of all persisted sessions (most recent first)."""
+    if not _is_local_request(request):
+        return JSONResponse(status_code=403, content={"error": "Forbidden"})
     results = []
     for sid, s in _sessions.items():
         results.append({
@@ -614,11 +690,13 @@ async def list_sessions():
 
 
 @app.get("/api/sessions/{session_id}")
-async def get_session(session_id: str):
+async def get_session(session_id: str, token: str = ""):
     """Return the persisted outputs for a completed session."""
     session = _sessions.get(session_id)
     if not session:
         return JSONResponse(status_code=404, content={"error": "Session not found"})
+    if not _session_token_valid(session, token):
+        return JSONResponse(status_code=403, content={"error": "Forbidden"})
     return JSONResponse(content={
         "session_id": session_id,
         "idea": session.get("idea", ""),
@@ -739,11 +817,13 @@ def _build_sprint_pdf(session: dict) -> bytes:
 
 
 @app.get("/api/sessions/{session_id}/pdf")
-async def export_session_pdf(session_id: str):
+async def export_session_pdf(session_id: str, token: str = ""):
     """Download a completed sprint session as a branded A4 PDF."""
     session = _sessions.get(session_id)
     if not session:
         return JSONResponse(status_code=404, content={"error": "Session not found"})
+    if not _session_token_valid(session, token):
+        return JSONResponse(status_code=403, content={"error": "Forbidden"})
     if session.get("status") not in ("complete", "error"):
         return JSONResponse(
             status_code=409,

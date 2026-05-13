@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -870,6 +871,11 @@
         let agentOutputs = {};  // raw markdown strings keyed by agent id
         let currentIdea = '';
         let currentSessionId = null;
+        let currentSessionToken = null;
+
+        function renderMarkdown(markdownText) {
+            return DOMPurify.sanitize(marked.parse(markdownText || ''));
+        }
 
         function toggleOutput(agentId) {
             const el = document.getElementById(`output-${agentId}`);
@@ -912,6 +918,7 @@
             const idea = document.getElementById('idea-input').value.trim();
             if (!idea) return;
             currentIdea = idea;
+            currentSessionToken = null;
 
             const techStack = document.getElementById('tech-stack').value;
             const securityFramework = document.getElementById('security-framework').value;
@@ -963,6 +970,7 @@
                 }
 
                 currentSessionId = data.session_id;
+                currentSessionToken = data.session_token || null;
                 listenToEvents(data.session_id);
             } catch (err) {
                 showError('Failed to start the sprint. Check that the server is running.');
@@ -971,7 +979,7 @@
         }
 
         function listenToEvents(sessionId) {
-            const evtSource = new EventSource(`/api/stream/${sessionId}`);
+            const evtSource = new EventSource(`/api/stream/${sessionId}?token=${encodeURIComponent(currentSessionToken || '')}`);
 
             evtSource.onmessage = (event) => {
                 const data = JSON.parse(event.data);
@@ -996,7 +1004,7 @@
                         if (data.output) {
                             agentOutputs[data.agent] = data.output;
                             const content = document.getElementById(`output-content-${data.agent}`);
-                            content.innerHTML = marked.parse(data.output);
+                            content.innerHTML = renderMarkdown(data.output);
                             content.dataset.hasOutput = '1';
                             // Pre-fill HITL edit textarea with agent output
                             const editArea = document.getElementById(`hitl-edit-${data.agent}`);
@@ -1015,7 +1023,7 @@
                         if (data.output) {
                             agentOutputs[data.agent] = data.output;
                             const c = document.getElementById(`output-content-${data.agent}`);
-                            if (c) c.innerHTML = marked.parse(data.output);
+                            if (c) c.innerHTML = renderMarkdown(data.output);
                         }
                         break;
 
@@ -1057,7 +1065,7 @@
             badge.textContent = verdict;
             badge.className = 'verdict-badge ' + verdict.toLowerCase();
 
-            content.innerHTML = marked.parse(retroText);
+            content.innerHTML = renderMarkdown(retroText);
 
             section.classList.add('visible');
             document.getElementById('btn-download-all').classList.add('visible');
@@ -1082,7 +1090,7 @@
             btn.textContent = 'Continuing…';
 
             try {
-                const res = await fetch(`/api/approve/${currentSessionId}`, {
+                const res = await fetch(`/api/approve/${currentSessionId}?token=${encodeURIComponent(currentSessionToken || '')}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
@@ -1115,7 +1123,7 @@
 
         function downloadPdf() {
             if (!currentSessionId) return;
-            window.location.href = `/api/sessions/${currentSessionId}/pdf`;
+            window.location.href = `/api/sessions/${currentSessionId}/pdf?token=${encodeURIComponent(currentSessionToken || '')}`;
         }
 
         function downloadArtifacts() {
