@@ -68,6 +68,7 @@ _SECURITY_HEADERS = {
 }
 
 _RUN_RATE_LIMIT_PER_MINUTE = int(os.getenv("RUN_RATE_LIMIT_PER_MINUTE", "5"))
+_SESSION_LIST_TOKEN = os.getenv("SESSION_LIST_TOKEN", "")
 _run_rate_limit: dict[str, deque[float]] = defaultdict(deque)
 _run_rate_limit_lock = threading.Lock()
 
@@ -78,11 +79,20 @@ def _is_local_request(request: Request) -> bool:
 
 
 def _session_token_valid(session: dict[str, Any], token: str | None) -> bool:
-    expected = str(session.get("access_token") or "")
-    provided = str(token or "")
-    if not expected or not provided:
+    if token is None:
         return False
-    return hmac.compare_digest(expected, provided)
+    expected = session.get("access_token")
+    if not isinstance(expected, str) or not expected:
+        return False
+    if not isinstance(token, str) or not token:
+        return False
+    return hmac.compare_digest(expected, token)
+
+
+def _resolve_session_token(request: Request, token: str | None) -> str | None:
+    if token:
+        return token
+    return request.cookies.get("scrumtious_session_token")
 
 
 def _consume_run_token(client_id: str) -> bool:
@@ -95,6 +105,13 @@ def _consume_run_token(client_id: str) -> bool:
             return False
         window.append(now)
         return True
+
+
+def _client_identifier(request: Request) -> str:
+    xff = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if xff:
+        return xff
+    return request.client.host if request.client else "unknown"
 
 
 @app.middleware("http")
@@ -140,7 +157,6 @@ def _persist_session(session_id: str) -> None:
         "verdict": session.get("verdict", ""),
         # HITL: which agent is awaiting approval right now
         "pending_approval": session.get("pending_approval", None),
-        "access_token": session.get("access_token", ""),
     }
     try:
         _session_path(session_id).write_text(
@@ -248,7 +264,6 @@ def _build_error_payload(exc: Exception) -> dict[str, str]:
 
     return {
         "message": message,
-        "error_type": type(exc).__name__,
         "hint": hint,
     }
 
@@ -554,7 +569,7 @@ async def start_run(request: Request):
     idea = body.get("idea", "").strip()
     tech_stack = body.get("tech_stack", "").strip()
     security_framework = body.get("security_framework", "OWASP Top-10").strip()
-    client_id = request.client.host if request.client else "unknown"
+    client_id = _client_identifier(request)
 
     if not _consume_run_token(client_id):
         return JSONResponse(
@@ -593,15 +608,25 @@ async def start_run(request: Request):
     )
     thread.start()
 
-    return JSONResponse(content={"session_id": session_id, "session_token": session_token})
+    response = JSONResponse(content={"session_id": session_id, "session_token": session_token})
+    response.set_cookie(
+        key="scrumtious_session_token",
+        value=session_token,
+        httponly=True,
+        samesite="lax",
+        secure=(request.url.scheme == "https" or os.getenv("COOKIE_SECURE", "0") == "1"),
+        max_age=86400,
+    )
+    return response
 
 
 @app.get("/api/stream/{session_id}")
-async def stream_events(session_id: str, token: str = ""):
+async def stream_events(session_id: str, request: Request, token: str | None = None):
     session = _sessions.get(session_id)
     if not session:
         return JSONResponse(status_code=404, content={"error": "Session not found"})
-    if not _session_token_valid(session, token):
+    auth_token = _resolve_session_token(request, token)
+    if not _session_token_valid(session, auth_token):
         return JSONResponse(status_code=403, content={"error": "Forbidden"})
 
     async def event_generator():
@@ -640,14 +665,15 @@ async def stream_events(session_id: str, token: str = ""):
 
 
 @app.post("/api/approve/{session_id}")
-async def approve_step(session_id: str, request: Request, token: str = ""):
+async def approve_step(session_id: str, request: Request, token: str | None = None):
     """Human-in-the-loop: approve the current agent output and continue the sprint.
     Optionally pass {"edit": "revised text"} to override the output before continuing.
     """
     session = _sessions.get(session_id)
     if not session:
         return JSONResponse(status_code=404, content={"error": "Session not found"})
-    if not _session_token_valid(session, token):
+    auth_token = _resolve_session_token(request, token)
+    if not _session_token_valid(session, auth_token):
         return JSONResponse(status_code=403, content={"error": "Forbidden"})
     if session.get("status") != "awaiting_approval":
         return JSONResponse(status_code=409, content={"error": "Session is not awaiting approval"})
@@ -671,9 +697,13 @@ async def approve_step(session_id: str, request: Request, token: str = ""):
 
 
 @app.get("/api/sessions")
-async def list_sessions(request: Request):
+async def list_sessions(request: Request, token: str | None = None):
     """Return a list of all persisted sessions (most recent first)."""
     if not _is_local_request(request):
+        return JSONResponse(status_code=403, content={"error": "Forbidden"})
+    if not _SESSION_LIST_TOKEN:
+        return JSONResponse(status_code=403, content={"error": "Forbidden"})
+    if not token or not hmac.compare_digest(_SESSION_LIST_TOKEN, token):
         return JSONResponse(status_code=403, content={"error": "Forbidden"})
     results = []
     for sid, s in _sessions.items():
@@ -690,12 +720,13 @@ async def list_sessions(request: Request):
 
 
 @app.get("/api/sessions/{session_id}")
-async def get_session(session_id: str, token: str = ""):
+async def get_session(session_id: str, request: Request, token: str | None = None):
     """Return the persisted outputs for a completed session."""
     session = _sessions.get(session_id)
     if not session:
         return JSONResponse(status_code=404, content={"error": "Session not found"})
-    if not _session_token_valid(session, token):
+    auth_token = _resolve_session_token(request, token)
+    if not _session_token_valid(session, auth_token):
         return JSONResponse(status_code=403, content={"error": "Forbidden"})
     return JSONResponse(content={
         "session_id": session_id,
@@ -817,12 +848,13 @@ def _build_sprint_pdf(session: dict) -> bytes:
 
 
 @app.get("/api/sessions/{session_id}/pdf")
-async def export_session_pdf(session_id: str, token: str = ""):
+async def export_session_pdf(session_id: str, request: Request, token: str | None = None):
     """Download a completed sprint session as a branded A4 PDF."""
     session = _sessions.get(session_id)
     if not session:
         return JSONResponse(status_code=404, content={"error": "Session not found"})
-    if not _session_token_valid(session, token):
+    auth_token = _resolve_session_token(request, token)
+    if not _session_token_valid(session, auth_token):
         return JSONResponse(status_code=403, content={"error": "Forbidden"})
     if session.get("status") not in ("complete", "error"):
         return JSONResponse(

@@ -871,7 +871,6 @@
         let agentOutputs = {};  // raw markdown strings keyed by agent id
         let currentIdea = '';
         let currentSessionId = null;
-        let currentSessionToken = null;
 
         function renderMarkdown(markdownText) {
             return DOMPurify.sanitize(marked.parse(markdownText || ''));
@@ -918,7 +917,6 @@
             const idea = document.getElementById('idea-input').value.trim();
             if (!idea) return;
             currentIdea = idea;
-            currentSessionToken = null;
 
             const techStack = document.getElementById('tech-stack').value;
             const securityFramework = document.getElementById('security-framework').value;
@@ -970,7 +968,6 @@
                 }
 
                 currentSessionId = data.session_id;
-                currentSessionToken = data.session_token || null;
                 listenToEvents(data.session_id);
             } catch (err) {
                 showError('Failed to start the sprint. Check that the server is running.');
@@ -979,7 +976,7 @@
         }
 
         function listenToEvents(sessionId) {
-            const evtSource = new EventSource(`/api/stream/${sessionId}?token=${encodeURIComponent(currentSessionToken || '')}`);
+            const evtSource = new EventSource(`/api/stream/${sessionId}`);
 
             evtSource.onmessage = (event) => {
                 const data = JSON.parse(event.data);
@@ -1090,7 +1087,7 @@
             btn.textContent = 'Continuing…';
 
             try {
-                const res = await fetch(`/api/approve/${currentSessionId}?token=${encodeURIComponent(currentSessionToken || '')}`, {
+                const res = await fetch(`/api/approve/${currentSessionId}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
@@ -1123,7 +1120,7 @@
 
         function downloadPdf() {
             if (!currentSessionId) return;
-            window.location.href = `/api/sessions/${currentSessionId}/pdf?token=${encodeURIComponent(currentSessionToken || '')}`;
+            window.location.href = `/api/sessions/${currentSessionId}/pdf`;
         }
 
         function downloadArtifacts() {
