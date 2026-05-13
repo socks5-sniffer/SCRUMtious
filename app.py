@@ -437,7 +437,7 @@ def _run_crew_sync(session_id: str, idea: str, tech_stack: str = "", security_fr
             context=[task_refine, task_user_story, task_implement, task_audit],
         )
 
-        agents_list = [business_analyst, product_owner, lead_developer, security_auditor, scrum_master]
+        agents_list: list[Any] = [business_analyst, product_owner, lead_developer, security_auditor, scrum_master]
         tasks_list = [task_refine, task_user_story, task_implement, task_audit, task_retro]
 
         agent_task_map = {
@@ -689,9 +689,9 @@ async def approve_step(session_id: str, request: Request, token: str | None = No
         session["_hitl_edit"] = str(edit).strip()
 
     # Unblock the background thread
-    hitl_event: threading.Event = session.get("_hitl_event")
-    if hitl_event:
-        hitl_event.set()
+    hitl_event_obj = session.get("_hitl_event")
+    if isinstance(hitl_event_obj, threading.Event):
+        hitl_event_obj.set()
 
     return JSONResponse(content={"ok": True})
 
