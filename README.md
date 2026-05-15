@@ -207,6 +207,9 @@ Open **http://127.0.0.1:8000** in your browser.
 | OWASP Top 10 | Explicitly checked in Security Auditor task for all 2021 categories |
 | Principle of Least Privilege | Verified as a mandatory step in every audit |
 | Input validation | Idea input capped at 2,000 characters server-side; `JSONResponse` enforces proper HTTP error codes |
+| Session access control | `POST /api/run` issues a per-session token (HttpOnly cookie by default) required to stream, approve, and export that session |
+| Session index access | `GET /api/sessions` is restricted to localhost and requires `SESSION_LIST_TOKEN` |
+| Output rendering safety | Markdown is sanitized with DOMPurify before HTML rendering to reduce XSS risk |
 | No hard-coded secrets | All keys loaded from environment; `.env` is in `.gitignore` |
 
 ---
@@ -223,6 +226,7 @@ Open **http://127.0.0.1:8000** in your browser.
 - `task_output.raw` is used to extract clean text from `TaskOutput` objects.
 - Completed sessions persist to disk and are re-loaded into memory on startup.
 - API endpoints: `GET /api/sessions`, `GET /api/sessions/{id}`, `POST /api/approve/{id}`.
+- Protected session endpoints require a per-session token returned by `POST /api/run` (sent via HttpOnly cookie by default, with optional `token` query parameter support).
 
 ### `templates/index.html` — Single-page UI
 
@@ -249,6 +253,8 @@ The original standalone script includes an extended pipeline with a **remediatio
 | `FIREBASE_SERVICE_ACCOUNT_KEY_PATH` | No | — | Path to Firebase service account JSON |
 | `HOST` | No | `127.0.0.1` | Server bind address |
 | `PORT` | No | `8000` | Server bind port |
+| `SESSION_LIST_TOKEN` | No | — | Shared token required to call `GET /api/sessions` (in addition to localhost restriction) |
+| `COOKIE_SECURE` | No | `0` | Set to `1` in HTTPS deployments to mark auth cookie as `Secure` |
 
 ---
 
