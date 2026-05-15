@@ -32,6 +32,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install system dependencies for pycairo/xhtml2pdf
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libcairo2-dev \
+            pkg-config \
+            python3-dev
+
       - name: Install pip-audit
         run: pip install pip-audit
 
