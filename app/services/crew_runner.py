@@ -6,15 +6,14 @@ and pausing after each agent for human approval. CrewAI itself is imported lazil
 so the rest of the app (and the test suite) can run without the heavy dependency.
 """
 
+import os
 import re
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.config import GEMINI_MODEL, logger
 from app.models import AGENT_IDS
 from app.services.session_store import store
-
-import os
 
 
 def extract_verdict(audit_output: str) -> str:
@@ -70,10 +69,10 @@ def run_crew_sync(
     security_framework: str = "OWASP Top-10",
 ) -> None:
     """Run the CrewAI crew in a background thread, pushing events to the session."""
-    from crewai import Agent, Crew, Task, LLM
+    from crewai import LLM, Agent, Crew, Task
 
     session = store.sessions[session_id]
-    current_datetime_utc = datetime.now(timezone.utc)
+    current_datetime_utc = datetime.now(UTC)
     current_datetime_label = current_datetime_utc.strftime("%Y-%m-%d %H:%M:%S UTC")
     current_date_context = (
         f"Current UTC date and time: {current_datetime_label}. "

@@ -6,6 +6,9 @@ Scrumtious is a standalone **web application** that orchestrates five specialise
 
 Powered by [CrewAI](https://github.com/joaomdmoura/crewAI) · [Google Gemini](https://aistudio.google.com) · [FastAPI](https://fastapi.tiangolo.com) · Python 3.11+
 
+[![CI](https://github.com/socks5-sniffer/SCRUMtious/actions/workflows/ci.yml/badge.svg)](https://github.com/socks5-sniffer/SCRUMtious/actions/workflows/ci.yml)
+[![OWASP Top 10 Security Scan](https://github.com/socks5-sniffer/SCRUMtious/actions/workflows/owasp-security-scan.yml/badge.svg)](https://github.com/socks5-sniffer/SCRUMtious/actions/workflows/owasp-security-scan.yml)
+
 ---
 
 ## What It Does

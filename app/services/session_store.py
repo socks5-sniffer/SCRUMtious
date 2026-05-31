@@ -11,7 +11,7 @@ tradeoffs and what multi-worker deployment would require.
 
 import json
 import pathlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.config import SESSIONS_DIR, logger
@@ -45,7 +45,7 @@ class SessionStore:
             "tech_stack": session.get("tech_stack", ""),
             "security_framework": session.get("security_framework", ""),
             "status": session.get("status", "running"),
-            "created_at": session.get("created_at", datetime.now(timezone.utc).isoformat()),
+            "created_at": session.get("created_at", datetime.now(UTC).isoformat()),
             "outputs": session.get("outputs", {}),
             "verdict": session.get("verdict", ""),
             # HITL: which agent is awaiting approval right now

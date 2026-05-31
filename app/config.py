@@ -30,7 +30,7 @@ def validate_required_env() -> None:
     """Fail fast at startup if any required environment variable is missing."""
     missing = [v for v in REQUIRED_ENV_VARS if not os.getenv(v)]
     if missing:
-        raise EnvironmentError(
+        raise OSError(
             f"Missing required environment variable(s): {', '.join(missing)}. "
             "Copy .env.example to .env and fill in your API keys."
         )

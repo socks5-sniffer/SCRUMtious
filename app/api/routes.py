@@ -12,7 +12,7 @@ import re
 import secrets
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
@@ -76,7 +76,7 @@ async def start_run(request: Request):
         "idea": idea,
         "tech_stack": tech_stack,
         "security_framework": security_framework,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "outputs": {},
         "verdict": "",
         "pending_approval": None,
