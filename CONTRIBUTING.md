@@ -63,10 +63,31 @@ cp .env.example .env
 # Edit .env and add your GEMINI_API_KEY
 
 # 5. Run the development server
-python app.py
+python -m app
 ```
 
 The app will be available at **http://127.0.0.1:8000**.
+
+---
+
+## Running Tests, Lint & Type Checks
+
+Install the development dependencies, then run the suite:
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+
+pytest             # run the test suite
+ruff check app/    # lint
+mypy app/ --ignore-missing-imports   # type check
+```
+
+The tests stub out the CrewAI call, so they run fast and require no API key
+(a placeholder `GEMINI_API_KEY` is set automatically by the test fixtures).
+
+The backend lives in the `app/` package — see
+[`docs/architecture.md`](docs/architecture.md) for the module layout and design
+tradeoffs.
 
 ---
 
@@ -114,7 +135,7 @@ Open a [Bug Report](https://github.com/socks5-sniffer/SCRUMtious/issues/new?temp
 - What you expected to happen
 - What actually happened
 - Your OS, Python version, and browser
-- Relevant logs from the terminal running `app.py`
+- Relevant logs from the terminal running `python -m app`
 
 ---
 
