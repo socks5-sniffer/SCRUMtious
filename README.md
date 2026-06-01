@@ -6,6 +6,9 @@ Scrumtious is a standalone **web application** that orchestrates five specialise
 
 Powered by [CrewAI](https://github.com/joaomdmoura/crewAI) · [Google Gemini](https://aistudio.google.com) · [FastAPI](https://fastapi.tiangolo.com) · Python 3.11+
 
+[![CI](https://github.com/socks5-sniffer/SCRUMtious/actions/workflows/ci.yml/badge.svg)](https://github.com/socks5-sniffer/SCRUMtious/actions/workflows/ci.yml)
+[![OWASP Top 10 Security Scan](https://github.com/socks5-sniffer/SCRUMtious/actions/workflows/owasp-security-scan.yml/badge.svg)](https://github.com/socks5-sniffer/SCRUMtious/actions/workflows/owasp-security-scan.yml)
+
 ---
 
 ## What It Does
@@ -101,7 +104,21 @@ scrumtious/
 │   │   └── codeql.yml           # GitHub Actions CodeQL security analysis workflow
 │   ├── dependabot.yml           # Dependabot update configuration
 │   └── PULL_REQUEST_TEMPLATE.md # Pull request template
-├── app.py                       # FastAPI server — SSE streaming, session management, crew orchestration
+├── app/                         # FastAPI application package
+│   ├── main.py                  # App factory (create_app) + ASGI `app`
+│   ├── __main__.py              # `python -m app` dev-server entrypoint
+│   ├── config.py                # Env loading, validation, and settings
+│   ├── models.py                # Domain metadata (the agent roster)
+│   ├── api/
+│   │   └── routes.py            # FastAPI route handlers (thin HTTP layer)
+│   ├── security/
+│   │   ├── auth.py              # Per-session token validation / access control
+│   │   ├── headers.py           # HTTP security-headers middleware (CSP, etc.)
+│   │   └── rate_limit.py        # Per-client sliding-window rate limiter
+│   └── services/
+│       ├── session_store.py     # In-memory + JSON-file session persistence
+│       ├── crew_runner.py       # CrewAI orchestration + human-in-the-loop gate
+│       └── pdf_export.py        # Branded A4 PDF generation
 ├── templates/
 │   └── index.html               # Single-page UI (vanilla JS, marked.js, Inter font)
 ├── static/                      # Static assets (served at /static)
@@ -179,7 +196,11 @@ GEMINI_API_KEY=your-gemini-api-key-here
 ### 4. Run
 
 ```bash
-python app.py
+# Development server (auto-reload)
+python -m app
+
+# …or run the ASGI app directly with uvicorn
+uvicorn app.main:app --reload
 ```
 
 Open **http://127.0.0.1:8000** in your browser.
@@ -216,7 +237,12 @@ Open **http://127.0.0.1:8000** in your browser.
 
 ## Architecture Notes
 
-### `app.py` — FastAPI server
+### `app/` — FastAPI application package
+
+The backend is organised into focused modules under `app/` (see the project
+structure above and [`docs/architecture.md`](docs/architecture.md) for the full
+breakdown). Route handlers in `app/api/routes.py` stay thin and delegate to the
+`app/services/*` modules for orchestration, persistence, and PDF export.
 
 - Each sprint run creates a UUID-keyed session in an in-memory dict **and immediately writes it to `sessions/<id>.json`**.
 - The CrewAI crew runs in a **background thread** (blocking I/O) so the async FastAPI event loop stays free.

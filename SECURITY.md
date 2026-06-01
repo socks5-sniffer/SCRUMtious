@@ -36,7 +36,7 @@ You will be credited in the release notes unless you prefer to remain anonymous.
 
 The following are **in scope**:
 
-- The FastAPI server (`app.py`) — SSE endpoints, session handling, input validation
+- The FastAPI server (the `app/` package) — SSE endpoints, session handling, input validation
 - Dependency vulnerabilities in `requirements.txt`
 - Secrets or API key leakage
 - Server-Side Request Forgery (SSRF) via AI agent output

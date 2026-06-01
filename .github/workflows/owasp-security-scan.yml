@@ -114,10 +114,10 @@ jobs:
         run: pip install bandit
 
       - name: Run Bandit (human-readable, medium+ severity)
-        run: bandit -r app.py versions/ -ll || true
+        run: bandit -r app/ versions/ -ll || true
 
       - name: Run Bandit (JSON report)
-        run: bandit -r app.py versions/ -f json -o bandit-report.json -ll
+        run: bandit -r app/ versions/ -f json -o bandit-report.json -ll
         continue-on-error: true
 
       - name: Upload Bandit report
@@ -144,7 +144,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
 
-      - name: Verify security configuration in app.py
+      - name: Verify security configuration in app package
         run: |
           set -e
           FAIL=0
@@ -152,7 +152,7 @@ jobs:
           echo "── Checking FastAPI security configuration ──"
 
           # Swagger UI must be disabled to prevent API schema exposure
-          if grep -q "docs_url=None" app.py; then
+          if grep -rq "docs_url=None" app/; then
             echo "✓ Swagger UI disabled (docs_url=None)"
           else
             echo "✗ FAIL: Swagger UI not disabled — add docs_url=None to FastAPI()"
@@ -160,7 +160,7 @@ jobs:
           fi
 
           # ReDoc UI must also be disabled
-          if grep -q "redoc_url=None" app.py; then
+          if grep -rq "redoc_url=None" app/; then
             echo "✓ ReDoc UI disabled (redoc_url=None)"
           else
             echo "✗ FAIL: ReDoc UI not disabled — add redoc_url=None to FastAPI()"
@@ -168,7 +168,7 @@ jobs:
           fi
 
           # Startup environment-variable validation must be present
-          if grep -q "_REQUIRED_ENV_VARS" app.py; then
+          if grep -rq "_REQUIRED_ENV_VARS" app/; then
             echo "✓ Startup env-var validation present"
           else
             echo "✗ FAIL: No startup env-var validation found"
@@ -176,10 +176,10 @@ jobs:
           fi
 
           # Input length enforcement must be present (DoS / injection mitigation)
-          if grep -qE "len\(.+\) > [0-9]+" app.py; then
+          if grep -rqE "len\(.+\) > [0-9]+" app/; then
             echo "✓ Input length validation present"
           else
-            echo "⚠ Warning: No input length cap detected in app.py"
+            echo "⚠ Warning: No input length cap detected in app/"
           fi
 
           # The .env file must never be committed
@@ -198,7 +198,7 @@ jobs:
           fi
 
           # Warn if no HTTP security-headers middleware is configured
-          if grep -qE "X-Frame-Options|X-Content-Type|SecurityMiddleware|TrustedHostMiddleware" app.py; then
+          if grep -rqE "X-Frame-Options|X-Content-Type|SecurityMiddleware|TrustedHostMiddleware" app/; then
             echo "✓ Security headers middleware detected"
           else
             echo "⚠ Warning: No security-headers middleware found."
@@ -265,7 +265,7 @@ jobs:
           pip install mypy
 
       - name: Run mypy type check
-        run: mypy app.py --ignore-missing-imports --no-error-summary
+        run: mypy app/ --ignore-missing-imports --no-error-summary
         continue-on-error: true
 
   # ---------------------------------------------------------------------------
