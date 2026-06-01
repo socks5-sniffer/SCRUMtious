@@ -10,6 +10,7 @@ import os
 import re
 import threading
 from datetime import UTC, datetime
+from typing import Any
 
 from app.config import GEMINI_MODEL, logger
 from app.models import AGENT_IDS
@@ -236,7 +237,7 @@ def run_crew_sync(
             context=[task_refine, task_user_story, task_implement, task_audit],
         )
 
-        agents_list = [business_analyst, product_owner, lead_developer, security_auditor, scrum_master]
+        agents_list: list[Any] = [business_analyst, product_owner, lead_developer, security_auditor, scrum_master]
         tasks_list = [task_refine, task_user_story, task_implement, task_audit, task_retro]
 
         agent_task_map = {
