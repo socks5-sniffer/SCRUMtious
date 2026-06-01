@@ -344,6 +344,10 @@ def _on_task_complete(session_id: str, task_output, agent_task_map, tasks_list):
             session["status"] = "running"
             session["pending_approval"] = None
 
+            # Persist the resumed state (including any applied edit) so a restart
+            # after approval doesn't leave the on-disk copy stuck awaiting approval.
+            store.persist(session_id)
+
             # Signal the next agent is starting
             next_idx = completed_idx + 1
             session["events"].append({

@@ -6,6 +6,7 @@ eval — everything runs in-process.
 """
 
 import io
+from html import escape
 
 _AGENT_PDF_META = [
     ("business_analyst", "Business Analyst",  "#6366f1", "Requirements Document"),
@@ -16,16 +17,32 @@ _AGENT_PDF_META = [
 ]
 
 
+def _reject_external_resources(uri: str, rel: str | None = None) -> str:
+    """xhtml2pdf link callback that blocks all external resource loading.
+
+    The report is fully self-contained (inline CSS, no images), so any resource
+    reference — typically an ``<img>`` smuggled in via LLM/user Markdown — is
+    treated as hostile. Refusing to resolve ``http(s)://``, ``file://`` and
+    local filesystem paths prevents SSRF and local file disclosure during the
+    server-side render. ``data:`` URIs are inline and harmless, so they pass.
+    """
+    if uri.startswith("data:"):
+        return uri
+    raise ValueError(f"Blocked external resource during PDF render: {uri!r}")
+
+
 def build_sprint_pdf(session: dict) -> bytes:
     """Render a branded A4 PDF from a completed session's agent outputs."""
     import markdown as md_lib
     from xhtml2pdf import pisa
 
-    idea               = session.get("idea", "")
-    tech_stack         = session.get("tech_stack", "")
-    security_framework = session.get("security_framework", "")
-    created_at         = session.get("created_at", "")
-    verdict            = (session.get("verdict") or "UNKNOWN").upper()
+    # User-/LLM-supplied metadata is escaped before being interpolated into the
+    # HTML template to prevent HTML injection in the generated PDF.
+    idea               = escape(session.get("idea", ""))
+    tech_stack         = escape(session.get("tech_stack", ""))
+    security_framework = escape(session.get("security_framework", ""))
+    created_at         = escape(session.get("created_at", ""))
+    verdict            = escape((session.get("verdict") or "UNKNOWN").upper())
     outputs            = session.get("outputs", {})
 
     verdict_color = {"APPROVED": "#10b981", "BLOCKED": "#ef4444"}.get(verdict, "#f59e0b")
@@ -98,7 +115,7 @@ def build_sprint_pdf(session: dict) -> bytes:
 </body></html>"""
 
     buf = io.BytesIO()
-    result = pisa.CreatePDF(html, dest=buf)
+    result = pisa.CreatePDF(html, dest=buf, link_callback=_reject_external_resources)
     if getattr(result, "err", 0):
         raise RuntimeError(f"PDF generation encountered {getattr(result, 'err', '?')} error(s)")
     return buf.getvalue()

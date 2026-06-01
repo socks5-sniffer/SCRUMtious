@@ -22,7 +22,7 @@ class SessionStore:
 
     def __init__(self, sessions_dir: pathlib.Path) -> None:
         self.dir = sessions_dir
-        self.dir.mkdir(exist_ok=True)
+        self.dir.mkdir(parents=True, exist_ok=True)
         self.sessions: dict[str, dict[str, Any]] = {}
 
     def path(self, session_id: str) -> pathlib.Path:
@@ -50,6 +50,9 @@ class SessionStore:
             "verdict": session.get("verdict", ""),
             # HITL: which agent is awaiting approval right now
             "pending_approval": session.get("pending_approval", None),
+            # Per-session bearer token — required so a rehydrated session stays
+            # accessible to its owner (via cookie/token) after a restart.
+            "access_token": session.get("access_token", ""),
         }
         try:
             self.path(session_id).write_text(
@@ -64,8 +67,15 @@ class SessionStore:
             try:
                 data = json.loads(p.read_text(encoding="utf-8"))
                 sid = data.get("session_id", p.stem)
+                # A run that was mid-flight (running / awaiting_approval) cannot be
+                # resumed after a restart — there is no live crew thread or HITL
+                # event. Mark it errored so it doesn't appear stuck forever.
+                status = data.get("status", "")
+                if status not in ("complete", "error"):
+                    status = "error"
                 self.sessions[sid] = {
                     **data,
+                    "status": status,
                     "events": [],
                     "_task_idx": 0,
                     "_hitl_event": None,  # not resumable after restart

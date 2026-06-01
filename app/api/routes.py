@@ -50,7 +50,12 @@ async def index(request: Request):
 
 @router.post("/api/run")
 async def start_run(request: Request):
-    body = await request.json()
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Request body must be valid JSON"})
+    if not isinstance(body, dict):
+        return JSONResponse(status_code=400, content={"error": "Request body must be a JSON object"})
     idea = body.get("idea", "").strip()
     tech_stack = body.get("tech_stack", "").strip()
     security_framework = body.get("security_framework", "OWASP Top-10").strip()
@@ -167,7 +172,11 @@ async def approve_step(session_id: str, request: Request, token: str | None = No
     try:
         body = await request.json()
     except Exception:
-        pass
+        # An empty or non-JSON body is valid here: approving without an edit
+        # simply resumes the sprint, so fall back to the default empty dict.
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
 
     edit = body.get("edit")
     if edit is not None:
@@ -244,7 +253,10 @@ async def export_session_pdf(session_id: str, request: Request, token: str | Non
     try:
         pdf_bytes = pdf_export.build_sprint_pdf(session)
     except Exception:
-        config.logger.exception("PDF export failed for session %s", session_id)
+        # session_id is a validated store key (a UUID we generated); strip any
+        # CR/LF defensively so it can never forge log entries (CodeQL py/log-injection).
+        safe_id = session_id.replace("\r", "").replace("\n", "")
+        config.logger.exception("PDF export failed for session %s", safe_id)
         return JSONResponse(status_code=500, content={"error": "PDF generation failed"})
 
     idea_slug = re.sub(r"[^\w\s-]", "", session.get("idea", "sprint"))[:40]

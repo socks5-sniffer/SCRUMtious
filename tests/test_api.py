@@ -14,6 +14,12 @@ def test_index_renders(client):
     assert "SCRUMtious" in resp.text
 
 
+def test_run_rejects_malformed_json(client):
+    resp = client.post("/api/run", content="not json", headers={"Content-Type": "application/json"})
+    assert resp.status_code == 400
+    assert "JSON" in resp.json()["error"]
+
+
 def test_run_requires_idea(client):
     resp = client.post("/api/run", json={"idea": "   "})
     assert resp.status_code == 400
