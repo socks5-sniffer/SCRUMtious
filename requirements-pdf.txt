@@ -1,0 +1,9 @@
+# ── PDF / document rendering ───────────────────────────────────────────────────
+# Separated from requirements.txt because xhtml2pdf's build chain requires
+# native Cairo headers (libcairo2-dev) that are not present in the default
+# GitHub dependency-submission environment.
+#
+# Install AFTER the system packages:
+#   sudo apt-get install -y libcairo2-dev pkg-config python3-dev
+#   pip install -r requirements-pdf.txt
+xhtml2pdf>=0.2.17
