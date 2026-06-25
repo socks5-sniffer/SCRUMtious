@@ -7,5 +7,5 @@ pytest>=9.1.1
 httpx>=0.28.1          # required by Starlette/FastAPI TestClient
 
 # ── Linting & type checking ──────────────────────────────────────────────────
-ruff>=0.15.17
+ruff>=0.15.18
 mypy>=2.1.0
