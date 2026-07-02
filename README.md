@@ -125,6 +125,7 @@ scrumtious/
 ├── static/                      # Static assets (served at /static)
 │   ├── css/app.css              # UI styles
 │   ├── js/app.js                # UI logic (vanilla JS, no inline scripts)
+│   ├── fonts/                   # Self-hosted Inter (OFL-1.1)
 │   └── vendor/                  # Vendored marked + DOMPurify (no CDN)
 ├── public/                      # Images and other public-facing assets
 ├── sessions/                    # JSON session store (auto-created; gitignored)

@@ -1,3 +1,30 @@
+/* Inter, self-hosted (Fontsource / SIL OFL-1.1 — see static/fonts/LICENSE).
+   Served from /static so no request ever leaves the origin. */
+@font-face {
+    font-family: 'Inter'; font-style: normal; font-weight: 300; font-display: swap;
+    src: url('/static/fonts/inter-latin-300-normal.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap;
+    src: url('/static/fonts/inter-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap;
+    src: url('/static/fonts/inter-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap;
+    src: url('/static/fonts/inter-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Inter'; font-style: normal; font-weight: 700; font-display: swap;
+    src: url('/static/fonts/inter-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Inter'; font-style: normal; font-weight: 800; font-display: swap;
+    src: url('/static/fonts/inter-latin-800-normal.woff2') format('woff2');
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {

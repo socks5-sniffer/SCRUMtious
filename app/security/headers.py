@@ -16,8 +16,10 @@ SECURITY_HEADERS = {
         # no CDN host and no 'unsafe-inline' — the Markdown sanitizer cannot be
         # replaced by a third party or an injected inline script.
         "script-src 'self'; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com; "
+        # Fonts are self-hosted too (static/fonts), so no external hosts at all:
+        # every resource the page loads comes from this origin.
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self'; "
         "img-src 'self' data: blob:; "
         "connect-src 'self'; "
         "object-src 'none'; "
