@@ -40,6 +40,11 @@ def validate_required_env() -> None:
 RUN_RATE_LIMIT_PER_MINUTE = int(os.getenv("RUN_RATE_LIMIT_PER_MINUTE", "5"))
 SESSION_LIST_TOKEN = os.getenv("SESSION_LIST_TOKEN", "")
 
+# Honour X-Forwarded-For only when explicitly deployed behind a trusted reverse
+# proxy. The header is client-controlled, so trusting it by default would let
+# anyone mint fresh rate-limit identities per request.
+TRUST_PROXY = os.getenv("TRUST_PROXY", "0") == "1"
+
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
 
 # Filesystem locations (relative to the working directory / repo root).

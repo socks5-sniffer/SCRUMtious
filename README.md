@@ -117,6 +117,7 @@ scrumtious/
 │   │   └── rate_limit.py        # Per-client sliding-window rate limiter
 │   └── services/
 │       ├── session_store.py     # In-memory + JSON-file session persistence
+│       ├── agent_prompts.py     # Declarative agent role/goal/task prompt specs
 │       ├── crew_runner.py       # CrewAI orchestration + human-in-the-loop gate
 │       └── pdf_export.py        # Branded A4 PDF generation
 ├── templates/

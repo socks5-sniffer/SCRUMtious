@@ -2,7 +2,9 @@
 
 import pytest
 
+from app.models import AGENT_IDS
 from app.services import crew_runner
+from app.services.agent_prompts import AGENT_PROMPTS
 from app.services.pdf_export import build_sprint_pdf
 from app.services.session_store import SessionStore
 
@@ -12,12 +14,48 @@ def test_extract_verdict_structured():
     assert crew_runner.extract_verdict("verdict - blocked") == "BLOCKED"
 
 
+def test_extract_verdict_prefers_last_structured_line():
+    # The prompt mandates a terminal VERDICT line; an earlier mention must lose.
+    report = "Draft verdict: BLOCKED pending fixes.\n...fixes applied...\nVERDICT: APPROVED"
+    assert crew_runner.extract_verdict(report) == "APPROVED"
+
+
 def test_extract_verdict_falls_back_to_last_keyword():
     assert crew_runner.extract_verdict("was BLOCKED, now APPROVED") == "APPROVED"
 
 
 def test_extract_verdict_unknown():
     assert crew_runner.extract_verdict("no decision here") == "UNKNOWN"
+
+
+def test_agent_prompts_match_pipeline():
+    # The prompt specs are the single source of truth for the crew; they must
+    # stay in lockstep with the canonical agent roster.
+    assert list(AGENT_PROMPTS) == AGENT_IDS
+    for spec in AGENT_PROMPTS.values():
+        for dep in spec["context"]:
+            assert dep in AGENT_PROMPTS
+
+
+def test_agent_prompt_templates_format_cleanly():
+    values = {
+        "idea": "an idea with {braces} and 'quotes'",  # braces in user input are values, not templates
+        "stack_context": " The target technology stack is: Python/FastAPI.",
+        "stack_clause": " in Python/FastAPI",
+        "security_framework": "OWASP Top-10",
+        "date_context": "Current UTC date and time: 2026-07-02.",
+    }
+    for spec in AGENT_PROMPTS.values():
+        for key in ("goal", "backstory", "description"):
+            rendered = spec[key].format(**values)
+            assert rendered
+        assert spec["expected_output"]
+
+
+def test_auditor_prompt_demands_machine_readable_verdict():
+    description = AGENT_PROMPTS["security_auditor"]["description"]
+    assert "VERDICT: APPROVED" in description
+    assert "VERDICT: BLOCKED" in description
 
 
 def test_build_error_payload_classifies_auth_failure():

@@ -59,18 +59,18 @@ async def start_run(request: Request):
     idea = body.get("idea", "").strip()
     tech_stack = body.get("tech_stack", "").strip()
     security_framework = body.get("security_framework", "OWASP Top-10").strip()
-    client_id = client_identifier(request)
-
-    if not consume_run_token(client_id):
-        return JSONResponse(
-            status_code=429,
-            content={"error": "Rate limit exceeded. Please wait before starting another sprint."},
-        )
 
     if not idea:
         return JSONResponse(status_code=400, content={"error": "Please provide an idea"})
     if len(idea) > 2000:
         return JSONResponse(status_code=400, content={"error": "Idea must be 2000 characters or fewer"})
+
+    # Only consume a rate-limit token for requests that will actually start a run.
+    if not consume_run_token(client_identifier(request)):
+        return JSONResponse(
+            status_code=429,
+            content={"error": "Rate limit exceeded. Please wait before starting another sprint."},
+        )
 
     session_id = str(uuid.uuid4())
     session_token = secrets.token_urlsafe(32)
@@ -88,6 +88,7 @@ async def start_run(request: Request):
         "access_token": session_token,
         "_hitl_event": threading.Event(),
         "_hitl_edit": None,
+        "_edited_agents": [],
     }
     store.persist(session_id)
 

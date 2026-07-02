@@ -28,7 +28,7 @@ AGENTS: list[dict[str, Any]] = [
         "role": "Lead Developer",
         "icon": "⚡",
         "color": "#06b6d4",
-        "description": "Implements secure Python code following OWASP practices with full input validation.",
+        "description": "Implements secure code for your chosen tech stack, following the selected security framework with full input validation.",
     },
     {
         "id": "security_auditor",

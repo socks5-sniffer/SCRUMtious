@@ -91,3 +91,8 @@ dependency-free (no database) and easy to run locally.
   broker, and drive HITL via persisted state rather than an in-memory `Event`.
 - Run behind a reverse proxy (nginx/Caddy) terminating TLS; the app already sets
   HSTS when it sees an HTTPS scheme and emits a strict Content-Security-Policy.
+  Set `TRUST_PROXY=1` so the app resolves client identity from the last
+  `X-Forwarded-For` hop (the one your proxy appends). Without it the header is
+  ignored — it is client-controlled — but then every connection appears to come
+  from 127.0.0.1, which collapses the per-client rate limiter to a single bucket
+  and makes the local-only `/api/sessions` gate treat all traffic as local.

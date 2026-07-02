@@ -10,11 +10,37 @@ from typing import Any
 
 from fastapi import Request
 
+from app import config
+
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def resolve_client_host(request: Request) -> str:
+    """Resolve the client's network identity, proxy-aware.
+
+    ``X-Forwarded-For`` is client-controlled, so it is only honoured when
+    ``TRUST_PROXY=1`` declares a trusted reverse proxy in front of the app.
+    In that case the *last* entry is used — the hop appended by our own
+    proxy — because any earlier entries can be forged by the client.
+    """
+    if config.TRUST_PROXY:
+        xff = request.headers.get("x-forwarded-for", "")
+        if xff:
+            hop = xff.split(",")[-1].strip()
+            if hop:
+                return hop
+    return request.client.host if request.client else "unknown"
+
 
 def is_local_request(request: Request) -> bool:
-    """Return True if the request originates from localhost."""
-    host = request.client.host if request.client else ""
-    return host in {"127.0.0.1", "::1", "localhost"}
+    """Return True if the request originates from localhost.
+
+    Uses the proxy-aware client host: behind a reverse proxy on the same
+    machine every connection arrives from 127.0.0.1, so without
+    ``TRUST_PROXY=1`` this check would treat all traffic as local and
+    silently disable the local-only gate on admin endpoints.
+    """
+    return resolve_client_host(request) in _LOOPBACK_HOSTS
 
 
 def session_token_valid(session: dict[str, Any], token: str | None) -> bool:
