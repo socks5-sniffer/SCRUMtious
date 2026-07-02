@@ -86,7 +86,7 @@ def test_approval_without_edit_leaves_output_untouched(tmp_path, monkeypatch):
 
 
 def test_retro_task_receives_pipeline_facts_about_edits(tmp_path, monkeypatch):
-    session = _make_session(tmp_path, monkeypatch, _task_idx=3, _edited_agents=["product_owner"])
+    _make_session(tmp_path, monkeypatch, _task_idx=3, _edited_agents=["product_owner"])
     tasks_list = [_FakeTask("out") for _ in range(5)]
 
     crew_runner._on_task_complete("sid", _FakeTaskOutput("audit report"), {}, tasks_list)
@@ -96,7 +96,6 @@ def test_retro_task_receives_pipeline_facts_about_edits(tmp_path, monkeypatch):
     assert "edited" in retro_description
     # Earlier tasks are untouched.
     assert tasks_list[2].description == "desc"
-    del session
 
 
 def test_retro_task_receives_no_edit_facts(tmp_path, monkeypatch):
