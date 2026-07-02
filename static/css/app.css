@@ -328,6 +328,12 @@ textarea::placeholder {
     user-select: none;
 }
 
+.agent-card-header:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--radius);
+}
+
 .agent-avatar {
     width: 44px;
     height: 44px;

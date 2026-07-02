@@ -95,7 +95,8 @@
             <div class="agent-cards" id="agent-cards">
                 {% for agent in agents %}
                 <div class="agent-card waiting" id="card-{{ agent.id }}" style="--agent-color: {{ agent.color }}">
-                    <div class="agent-card-header" data-agent="{{ agent.id }}">
+                    <div class="agent-card-header" data-agent="{{ agent.id }}"
+                        role="button" tabindex="0" aria-expanded="false" aria-controls="output-{{ agent.id }}">
                         <div class="agent-avatar">{{ agent.icon }}</div>
                         <div class="agent-info">
                             <div class="agent-role">{{ agent.role }}</div>

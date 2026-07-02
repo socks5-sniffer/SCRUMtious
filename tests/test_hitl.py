@@ -58,7 +58,7 @@ def test_hitl_edit_reaches_downstream_task_context(tmp_path, monkeypatch):
     task_output = _FakeTaskOutput("original")
     tasks_list = [_FakeTask("original")] + [_FakeTask() for _ in range(4)]
 
-    crew_runner._on_task_complete("sid", task_output, {}, tasks_list)
+    crew_runner._on_task_complete("sid", task_output, tasks_list)
 
     # The edit must land everywhere the next agent could read from: the session
     # outputs (UI/PDF) and the CrewAI task output (downstream task context).
@@ -78,7 +78,7 @@ def test_approval_without_edit_leaves_output_untouched(tmp_path, monkeypatch):
     task_output = _FakeTaskOutput("original")
     tasks_list = [_FakeTask("original")] + [_FakeTask() for _ in range(4)]
 
-    crew_runner._on_task_complete("sid", task_output, {}, tasks_list)
+    crew_runner._on_task_complete("sid", task_output, tasks_list)
 
     assert session["outputs"]["business_analyst"] == "original"
     assert task_output.raw == "original"
@@ -89,7 +89,7 @@ def test_retro_task_receives_pipeline_facts_about_edits(tmp_path, monkeypatch):
     _make_session(tmp_path, monkeypatch, _task_idx=3, _edited_agents=["product_owner"])
     tasks_list = [_FakeTask("out") for _ in range(5)]
 
-    crew_runner._on_task_complete("sid", _FakeTaskOutput("audit report"), {}, tasks_list)
+    crew_runner._on_task_complete("sid", _FakeTaskOutput("audit report"), tasks_list)
 
     retro_description = tasks_list[4].description
     assert "product_owner" in retro_description
@@ -102,7 +102,7 @@ def test_retro_task_receives_no_edit_facts(tmp_path, monkeypatch):
     _make_session(tmp_path, monkeypatch, _task_idx=3)
     tasks_list = [_FakeTask("out") for _ in range(5)]
 
-    crew_runner._on_task_complete("sid", _FakeTaskOutput("audit report"), {}, tasks_list)
+    crew_runner._on_task_complete("sid", _FakeTaskOutput("audit report"), tasks_list)
 
     assert "without edits" in tasks_list[4].description
 
@@ -114,7 +114,7 @@ def test_hitl_timeout_aborts_sprint(tmp_path, monkeypatch):
     tasks_list = [_FakeTask("out") for _ in range(5)]
 
     with pytest.raises(crew_runner.HitlTimeoutError):
-        crew_runner._on_task_complete("sid", _FakeTaskOutput("original"), {}, tasks_list)
+        crew_runner._on_task_complete("sid", _FakeTaskOutput("original"), tasks_list)
 
     assert session["status"] == "error"
     assert session["_hitl_timed_out"] is True
@@ -126,7 +126,7 @@ def test_last_agent_completion_needs_no_approval(tmp_path, monkeypatch):
     session = _make_session(tmp_path, monkeypatch, _task_idx=4)
     tasks_list = [_FakeTask("out") for _ in range(5)]
 
-    crew_runner._on_task_complete("sid", _FakeTaskOutput("retro"), {}, tasks_list)
+    crew_runner._on_task_complete("sid", _FakeTaskOutput("retro"), tasks_list)
 
     assert session["outputs"]["scrum_master"] == "retro"
     assert session["status"] == "running"  # completion event is emitted by run_crew_sync

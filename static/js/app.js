@@ -18,9 +18,16 @@ function renderMarkdown(markdownText) {
     return DOMPurify.sanitize(marked.parse(markdownText || ''));
 }
 
+function setOutputVisible(agentId, visible) {
+    document.getElementById(`output-${agentId}`).classList.toggle('visible', visible);
+    // Keep the accordion header's ARIA state in sync for screen readers.
+    const header = document.querySelector(`.agent-card-header[data-agent="${agentId}"]`);
+    if (header) header.setAttribute('aria-expanded', String(visible));
+}
+
 function toggleOutput(agentId) {
     const el = document.getElementById(`output-${agentId}`);
-    el.classList.toggle('visible');
+    setOutputVisible(agentId, !el.classList.contains('visible'));
 }
 
 function setAgentState(agentId, state) {
@@ -33,7 +40,7 @@ function setAgentState(agentId, state) {
 
     if (state === 'active') {
         status.innerHTML = '<span class="spinner"></span> Working';
-        document.getElementById(`output-${agentId}`).classList.add('visible');
+        setOutputVisible(agentId, true);
         const content = document.getElementById(`output-content-${agentId}`);
         if (!content.dataset.hasOutput) {
             content.innerHTML = '<span style="color:var(--text-dim)">Agent is processing…</span>';
@@ -74,7 +81,7 @@ async function startRun() {
         const content = document.getElementById(`output-content-${id}`);
         content.innerHTML = 'Waiting for agent output…';
         delete content.dataset.hasOutput;
-        document.getElementById(`output-${id}`).classList.remove('visible');
+        setOutputVisible(id, false);
     });
     agentOutputs = {};
     document.getElementById('progress-fill').style.width = '0%';
@@ -302,6 +309,13 @@ document.getElementById('btn-download-pdf').addEventListener('click', downloadPd
 
 document.querySelectorAll('.agent-card-header[data-agent]').forEach(el => {
     el.addEventListener('click', () => toggleOutput(el.dataset.agent));
+    // The header carries role="button"/tabindex="0"; mirror native button keys.
+    el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggleOutput(el.dataset.agent);
+        }
+    });
 });
 document.querySelectorAll('.btn-copy[data-agent]').forEach(el => {
     el.addEventListener('click', () => copyOutput(el.dataset.agent));

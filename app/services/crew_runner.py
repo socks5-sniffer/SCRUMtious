@@ -145,7 +145,6 @@ def run_crew_sync(
 
         agents_list = list(agents.values())
         tasks_list = list(tasks.values())
-        agent_task_map = {id(task): agent_id for agent_id, task in tasks.items()}
 
         push_event("agent_start", {"agent": AGENT_IDS[0]})
 
@@ -162,7 +161,7 @@ def run_crew_sync(
             """
             task_output = args[0] if args else kwargs.get("task_output")
             try:
-                _on_task_complete(session_id, task_output, agent_task_map, tasks_list)
+                _on_task_complete(session_id, task_output, tasks_list)
             except HitlTimeoutError:
                 # Deliberate abort — must propagate to stop the crew.
                 raise
@@ -206,8 +205,12 @@ def run_crew_sync(
         store.persist(session_id)
 
 
-def _on_task_complete(session_id: str, task_output, agent_task_map, tasks_list):
-    """Called when a CrewAI task finishes. Pauses for human approval before continuing."""
+def _on_task_complete(session_id: str, task_output, tasks_list):
+    """Called when a CrewAI task finishes. Pauses for human approval before continuing.
+
+    The completing agent is derived from the session's ``_task_idx`` cursor —
+    the pipeline is strictly sequential, so position identifies the task.
+    """
     session = store.sessions.get(session_id)
     if not session:
         return
@@ -257,8 +260,8 @@ def _on_task_complete(session_id: str, task_output, agent_task_map, tasks_list):
                     "type": "error",
                     "message": "Sprint aborted: no approval within the time limit.",
                     "hint": (
-                        f"Approvals must arrive within {HITL_TIMEOUT_SECONDS // 60} minutes. "
-                        "Start a new sprint to retry."
+                        f"Approvals must arrive within {HITL_TIMEOUT_SECONDS} seconds "
+                        "(HITL_TIMEOUT_SECONDS). Start a new sprint to retry."
                     ),
                 })
                 store.persist(session_id)
