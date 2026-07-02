@@ -246,25 +246,29 @@ def _on_task_complete(session_id: str, task_output, tasks_list):
             hitl_event = session["_hitl_event"]
             if not isinstance(hitl_event, threading.Event):
                 # Rehydrated sessions have no live HITL event and never reach
-                # here; fail loudly rather than continuing unapproved.
+                # here; if that invariant is ever broken, fail visibly rather
+                # than leaving the session stuck in awaiting_approval.
+                _abort_hitl(
+                    session,
+                    session_id,
+                    message="Sprint aborted: approval gate unavailable.",
+                    hint="The session has no live approval gate. Start a new sprint.",
+                )
                 raise HitlTimeoutError(f"No HITL event available for {agent_id}")
             hitl_event.clear()
             # Block the crew thread until approval — or abort so an abandoned
             # sprint releases its thread instead of holding it forever.
             approved = hitl_event.wait(timeout=HITL_TIMEOUT_SECONDS)
             if not approved:
-                session["_hitl_timed_out"] = True
-                session["status"] = "error"
-                session["pending_approval"] = None
-                session["events"].append({
-                    "type": "error",
-                    "message": "Sprint aborted: no approval within the time limit.",
-                    "hint": (
+                _abort_hitl(
+                    session,
+                    session_id,
+                    message="Sprint aborted: no approval within the time limit.",
+                    hint=(
                         f"Approvals must arrive within {HITL_TIMEOUT_SECONDS} seconds "
                         "(HITL_TIMEOUT_SECONDS). Start a new sprint to retry."
                     ),
-                })
-                store.persist(session_id)
+                )
                 raise HitlTimeoutError(f"Approval for {agent_id} timed out")
 
             # Apply any user edit
@@ -301,6 +305,19 @@ def _on_task_complete(session_id: str, task_output, tasks_list):
             })
 
     session["_task_idx"] = completed_idx + 1
+
+
+def _abort_hitl(session, session_id: str, message: str, hint: str) -> None:
+    """Mark a session errored (with a visible error event) before aborting HITL.
+
+    Also sets ``_hitl_timed_out`` so ``run_crew_sync`` won't overwrite the
+    error state if the installed CrewAI version swallows callback exceptions.
+    """
+    session["_hitl_timed_out"] = True
+    session["status"] = "error"
+    session["pending_approval"] = None
+    session["events"].append({"type": "error", "message": message, "hint": hint})
+    store.persist(session_id)
 
 
 def _apply_edit_to_task_output(task, task_output, edit: str) -> None:

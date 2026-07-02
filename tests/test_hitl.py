@@ -122,6 +122,20 @@ def test_hitl_timeout_aborts_sprint(tmp_path, monkeypatch):
     assert session["events"][-1]["type"] == "error"
 
 
+def test_missing_hitl_event_marks_session_errored(tmp_path, monkeypatch):
+    # A session that somehow lacks a live approval gate must fail visibly,
+    # not sit in awaiting_approval forever.
+    session = _make_session(tmp_path, monkeypatch, _hitl_event=None)
+    tasks_list = [_FakeTask("out") for _ in range(5)]
+
+    with pytest.raises(crew_runner.HitlTimeoutError):
+        crew_runner._on_task_complete("sid", _FakeTaskOutput("original"), tasks_list)
+
+    assert session["status"] == "error"
+    assert session["pending_approval"] is None
+    assert session["events"][-1]["type"] == "error"
+
+
 def test_last_agent_completion_needs_no_approval(tmp_path, monkeypatch):
     session = _make_session(tmp_path, monkeypatch, _task_idx=4)
     tasks_list = [_FakeTask("out") for _ in range(5)]
