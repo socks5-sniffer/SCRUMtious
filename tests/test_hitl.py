@@ -6,6 +6,8 @@ exercised without CrewAI or a live crew thread.
 
 import threading
 
+import pytest
+
 from app.services import crew_runner
 from app.services.session_store import store
 
@@ -104,6 +106,21 @@ def test_retro_task_receives_no_edit_facts(tmp_path, monkeypatch):
     crew_runner._on_task_complete("sid", _FakeTaskOutput("audit report"), {}, tasks_list)
 
     assert "without edits" in tasks_list[4].description
+
+
+def test_hitl_timeout_aborts_sprint(tmp_path, monkeypatch):
+    # A real Event that is never set: the wait must give up and abort the crew.
+    monkeypatch.setattr(crew_runner, "HITL_TIMEOUT_SECONDS", 0)
+    session = _make_session(tmp_path, monkeypatch, _hitl_event=threading.Event())
+    tasks_list = [_FakeTask("out") for _ in range(5)]
+
+    with pytest.raises(crew_runner.HitlTimeoutError):
+        crew_runner._on_task_complete("sid", _FakeTaskOutput("original"), {}, tasks_list)
+
+    assert session["status"] == "error"
+    assert session["_hitl_timed_out"] is True
+    assert session["pending_approval"] is None
+    assert session["events"][-1]["type"] == "error"
 
 
 def test_last_agent_completion_needs_no_approval(tmp_path, monkeypatch):

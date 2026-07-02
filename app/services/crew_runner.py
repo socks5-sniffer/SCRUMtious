@@ -9,13 +9,22 @@ so the rest of the app (and the test suite) can run without the heavy dependency
 import os
 import re
 import threading
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from app.config import GEMINI_MODEL, logger
+from app.config import GEMINI_MODEL, HITL_TIMEOUT_SECONDS, logger
 from app.models import AGENT_IDS
 from app.services.agent_prompts import AGENT_PROMPTS
 from app.services.session_store import store
+
+
+class HitlTimeoutError(Exception):
+    """Raised when a sprint waits longer than HITL_TIMEOUT_SECONDS for approval.
+
+    Aborts the crew so an abandoned session releases its worker thread instead
+    of blocking it forever.
+    """
 
 
 def extract_verdict(audit_output: str) -> str:
@@ -154,6 +163,9 @@ def run_crew_sync(
             task_output = args[0] if args else kwargs.get("task_output")
             try:
                 _on_task_complete(session_id, task_output, agent_task_map, tasks_list)
+            except HitlTimeoutError:
+                # Deliberate abort — must propagate to stop the crew.
+                raise
             except Exception:
                 logger.exception("Task callback failed for session %s", session_id)
 
@@ -167,6 +179,11 @@ def run_crew_sync(
 
         result = crew.kickoff()
 
+        if session.get("_hitl_timed_out"):
+            # Some CrewAI versions swallow callback exceptions; the session was
+            # already marked errored at the timeout site, so don't overwrite it.
+            return
+
         audit_text = session.get("outputs", {}).get("security_auditor") or str(result)
         verdict = extract_verdict(audit_text)
         session["verdict"] = verdict
@@ -175,6 +192,11 @@ def run_crew_sync(
             "result": str(result),
         })
         session["status"] = "complete"
+        store.persist(session_id)
+
+    except HitlTimeoutError:
+        # Error event and status were already recorded at the timeout site.
+        logger.warning("Sprint %s aborted: HITL approval timed out", session_id)
         store.persist(session_id)
 
     except Exception as e:
@@ -218,9 +240,29 @@ def _on_task_complete(session_id: str, task_output, agent_task_map, tasks_list):
             session["pending_approval"] = agent_id
             store.persist(session_id)
 
-            hitl_event: threading.Event = session["_hitl_event"]
+            hitl_event = session["_hitl_event"]
+            if not isinstance(hitl_event, threading.Event):
+                # Rehydrated sessions have no live HITL event and never reach
+                # here; fail loudly rather than continuing unapproved.
+                raise HitlTimeoutError(f"No HITL event available for {agent_id}")
             hitl_event.clear()
-            hitl_event.wait()  # blocks the background thread here
+            # Block the crew thread until approval — or abort so an abandoned
+            # sprint releases its thread instead of holding it forever.
+            approved = hitl_event.wait(timeout=HITL_TIMEOUT_SECONDS)
+            if not approved:
+                session["_hitl_timed_out"] = True
+                session["status"] = "error"
+                session["pending_approval"] = None
+                session["events"].append({
+                    "type": "error",
+                    "message": "Sprint aborted: no approval within the time limit.",
+                    "hint": (
+                        f"Approvals must arrive within {HITL_TIMEOUT_SECONDS // 60} minutes. "
+                        "Start a new sprint to retry."
+                    ),
+                })
+                store.persist(session_id)
+                raise HitlTimeoutError(f"Approval for {agent_id} timed out")
 
             # Apply any user edit
             edit = session.get("_hitl_edit")
@@ -279,7 +321,7 @@ def _apply_edit_to_task_output(task, task_output, edit: str) -> None:
             )
 
 
-def _inject_pipeline_facts(session: dict, retro_task) -> None:
+def _inject_pipeline_facts(session: Mapping[str, Any], retro_task) -> None:
     """Give the Scrum Master real process facts before the retrospective runs.
 
     The retro otherwise only sees the four documents; whether a human had to

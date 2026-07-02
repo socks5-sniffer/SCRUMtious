@@ -45,12 +45,22 @@ SESSION_LIST_TOKEN = os.getenv("SESSION_LIST_TOKEN", "")
 # anyone mint fresh rate-limit identities per request.
 TRUST_PROXY = os.getenv("TRUST_PROXY", "0") == "1"
 
+# How long a sprint may sit awaiting human approval before it is aborted and
+# its worker thread released (each active sprint holds one thread).
+HITL_TIMEOUT_SECONDS = int(os.getenv("HITL_TIMEOUT_SECONDS", "3600"))
+
+# Cap on simultaneously active sprints (running or awaiting approval); each one
+# holds a thread and spends LLM quota.
+MAX_CONCURRENT_RUNS = int(os.getenv("MAX_CONCURRENT_RUNS", "3"))
+
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
 
-# Filesystem locations (relative to the working directory / repo root).
-SESSIONS_DIR = pathlib.Path(os.getenv("SESSIONS_DIR", "sessions"))
-TEMPLATES_DIR = "templates"
-STATIC_DIR = "static"
+# Filesystem locations, anchored to the repo root so the app works regardless
+# of the process working directory.
+BASE_DIR = pathlib.Path(__file__).resolve().parent.parent
+SESSIONS_DIR = pathlib.Path(os.getenv("SESSIONS_DIR", str(BASE_DIR / "sessions")))
+TEMPLATES_DIR = BASE_DIR / "templates"
+STATIC_DIR = BASE_DIR / "static"
 
 # Server bind settings (used by ``python -m app``).
 HOST = os.getenv("HOST", "127.0.0.1")

@@ -6,6 +6,7 @@ token from either the query string or the cookie.
 """
 
 import hmac
+from collections.abc import Mapping
 from typing import Any
 
 from fastapi import Request
@@ -43,7 +44,7 @@ def is_local_request(request: Request) -> bool:
     return resolve_client_host(request) in _LOOPBACK_HOSTS
 
 
-def session_token_valid(session: dict[str, Any], token: str | None) -> bool:
+def session_token_valid(session: Mapping[str, Any], token: str | None) -> bool:
     """Constant-time check that ``token`` matches the session's access token."""
     if token is None:
         return False
@@ -56,7 +57,18 @@ def session_token_valid(session: dict[str, Any], token: str | None) -> bool:
 
 
 def resolve_session_token(request: Request, token: str | None) -> str | None:
-    """Prefer an explicit token, otherwise fall back to the session cookie."""
+    """Resolve the session token: query param, then Authorization header, then cookie.
+
+    Prefer ``Authorization: Bearer <token>`` (or the cookie the browser flow
+    already uses) for programmatic access — query-string tokens end up in
+    access logs and browser history. The query param remains supported for
+    backwards compatibility.
+    """
     if token:
         return token
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        bearer = auth_header[7:].strip()
+        if bearer:
+            return bearer
     return request.cookies.get("scrumtious_session_token")

@@ -1,11 +1,58 @@
 """Domain models and metadata shared across the application.
 
-Currently holds the canonical roster of Scrum agents used to render the UI.
-Request/response shapes are validated inline in the route handlers to keep the
-existing API contract and error messages stable.
+Holds the canonical roster of Scrum agents used to render the UI, the Pydantic
+request models for the API, and the typed shape of a session. Validation error
+responses are normalised in ``app.main`` so the historical ``{"error": ...}``
+contract and messages stay stable.
 """
 
-from typing import Any
+import threading
+from typing import Any, TypedDict
+
+from pydantic import BaseModel, field_validator
+
+# Input size limits (DoS / storage-growth mitigation).
+MAX_IDEA_LENGTH = 2000
+MAX_EDIT_LENGTH = 20000
+
+
+class RunRequest(BaseModel):
+    """Body of ``POST /api/run``. Length/emptiness rules are enforced in the
+    route handler to keep the exact historical error messages."""
+
+    idea: str = ""
+    tech_stack: str = ""
+    security_framework: str = "OWASP Top-10"
+
+    @field_validator("idea", "tech_stack", "security_framework")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        return value.strip()
+
+
+class SessionState(TypedDict, total=False):
+    """Shape of a session dict (in ``store.sessions``).
+
+    Keys prefixed with ``_`` are transient: they never reach disk and are
+    reset when a session is re-hydrated after a restart.
+    """
+
+    session_id: str
+    status: str  # running | awaiting_approval | complete | error
+    events: list[dict[str, Any]]
+    idea: str
+    tech_stack: str
+    security_framework: str
+    created_at: str
+    outputs: dict[str, str]
+    verdict: str
+    pending_approval: str | None
+    access_token: str
+    _task_idx: int
+    _hitl_event: threading.Event | None
+    _hitl_edit: str | None
+    _edited_agents: list[str]
+    _hitl_timed_out: bool
 
 # The ordered roster of agents shown in the UI and used to label outputs.
 AGENTS: list[dict[str, Any]] = [

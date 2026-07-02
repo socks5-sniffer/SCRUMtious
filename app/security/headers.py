@@ -12,7 +12,10 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
     "Content-Security-Policy": (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        # Scripts are vendored into /static and wired via addEventListener, so
+        # no CDN host and no 'unsafe-inline' — the Markdown sanitizer cannot be
+        # replaced by a third party or an injected inline script.
+        "script-src 'self'; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: blob:; "

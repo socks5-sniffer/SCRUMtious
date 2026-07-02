@@ -121,15 +121,15 @@ scrumtious/
 │       ├── crew_runner.py       # CrewAI orchestration + human-in-the-loop gate
 │       └── pdf_export.py        # Branded A4 PDF generation
 ├── templates/
-│   └── index.html               # Single-page UI (vanilla JS, marked.js, Inter font)
+│   └── index.html               # Single-page UI markup (Jinja2)
 ├── static/                      # Static assets (served at /static)
+│   ├── css/app.css              # UI styles
+│   ├── js/app.js                # UI logic (vanilla JS, no inline scripts)
+│   └── vendor/                  # Vendored marked + DOMPurify (no CDN)
 ├── public/                      # Images and other public-facing assets
 ├── sessions/                    # JSON session store (auto-created; gitignored)
 ├── data/
 │   └── sprint-artifacts/        # Sample sprint output artifacts
-├── versions/
-│   ├── scrumtious.py            # Original standalone CLI script (full pipeline with Firebase sync)
-│   └── scrumtious_clean.py      # Simplified CLI version
 ├── .env                         # Your local secrets (never committed)
 ├── .env.example                 # Template for required environment variables
 ├── .gitignore

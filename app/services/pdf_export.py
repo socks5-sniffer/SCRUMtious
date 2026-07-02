@@ -6,7 +6,9 @@ eval — everything runs in-process.
 """
 
 import io
+from collections.abc import Mapping
 from html import escape
+from typing import Any
 
 _AGENT_PDF_META = [
     ("business_analyst", "Business Analyst",  "#6366f1", "Requirements Document"),
@@ -31,7 +33,7 @@ def _reject_external_resources(uri: str, rel: str | None = None) -> str:
     raise ValueError(f"Blocked external resource during PDF render: {uri!r}")
 
 
-def build_sprint_pdf(session: dict) -> bytes:
+def build_sprint_pdf(session: Mapping[str, Any]) -> bytes:
     """Render a branded A4 PDF from a completed session's agent outputs."""
     import markdown as md_lib
     from xhtml2pdf import pisa
