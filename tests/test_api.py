@@ -66,6 +66,15 @@ def test_sessions_list_blocked_for_non_local(client):
     assert client.get("/api/sessions?token=test-list-token").status_code == 403
 
 
+def test_run_rejects_oversized_options(client):
+    resp = client.post("/api/run", json={"idea": "ok", "tech_stack": "x" * 201})
+    assert resp.status_code == 400
+    assert "Tech stack" in resp.json()["error"]
+    resp = client.post("/api/run", json={"idea": "ok", "security_framework": "x" * 201})
+    assert resp.status_code == 400
+    assert "Security framework" in resp.json()["error"]
+
+
 def test_run_rejects_non_string_idea(client):
     resp = client.post("/api/run", json={"idea": 12345})
     assert resp.status_code == 400

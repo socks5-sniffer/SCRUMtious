@@ -122,6 +122,28 @@ def test_hitl_timeout_aborts_sprint(tmp_path, monkeypatch):
     assert session["events"][-1]["type"] == "error"
 
 
+def test_hitl_gate_rearmed_before_awaiting_approval(tmp_path, monkeypatch):
+    # /api/approve only sets the event once status == awaiting_approval, so
+    # clear() must run BEFORE the status flips — otherwise a fast approval
+    # could be wiped and the sprint would block until timeout.
+    observed = {}
+
+    class _RecordingEvent(threading.Event):
+        def clear(self):
+            observed["status_at_clear"] = store.sessions["sid"]["status"]
+            super().clear()
+
+        def wait(self, timeout=None):
+            return True
+
+    _make_session(tmp_path, monkeypatch, _hitl_event=_RecordingEvent())
+    tasks_list = [_FakeTask("out") for _ in range(5)]
+
+    crew_runner._on_task_complete("sid", _FakeTaskOutput("original"), tasks_list)
+
+    assert observed["status_at_clear"] == "running"
+
+
 def test_missing_hitl_event_marks_session_errored(tmp_path, monkeypatch):
     # A session that somehow lacks a live approval gate must fail visibly,
     # not sit in awaiting_approval forever.

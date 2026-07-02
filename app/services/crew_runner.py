@@ -238,11 +238,6 @@ def _on_task_complete(session_id: str, task_output, tasks_list):
         store.persist(session_id)
 
         if not is_last:
-            # Pause the crew thread until the user approves (or edits)
-            session["status"] = "awaiting_approval"
-            session["pending_approval"] = agent_id
-            store.persist(session_id)
-
             hitl_event = session["_hitl_event"]
             if not isinstance(hitl_event, threading.Event):
                 # Rehydrated sessions have no live HITL event and never reach
@@ -255,7 +250,18 @@ def _on_task_complete(session_id: str, task_output, tasks_list):
                     hint="The session has no live approval gate. Start a new sprint.",
                 )
                 raise HitlTimeoutError(f"No HITL event available for {agent_id}")
+
+            # Re-arm the gate BEFORE announcing awaiting_approval: /api/approve
+            # only sets the event once the status flips, so clearing here means
+            # a fast approval can never be wiped by a later clear() (which
+            # would silently block the sprint until timeout).
             hitl_event.clear()
+
+            # Pause the crew thread until the user approves (or edits)
+            session["status"] = "awaiting_approval"
+            session["pending_approval"] = agent_id
+            store.persist(session_id)
+
             # Block the crew thread until approval — or abort so an abandoned
             # sprint releases its thread instead of holding it forever.
             approved = hitl_event.wait(timeout=HITL_TIMEOUT_SECONDS)

@@ -14,6 +14,9 @@ from pydantic import BaseModel, field_validator
 # Input size limits (DoS / storage-growth mitigation).
 MAX_IDEA_LENGTH = 2000
 MAX_EDIT_LENGTH = 20000
+# tech_stack / security_framework are short UI select values; cap them so they
+# can't smuggle oversized text into session storage and agent prompts.
+MAX_OPTION_LENGTH = 200
 
 
 class RunRequest(BaseModel):

@@ -19,7 +19,13 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.templating import Jinja2Templates
 
 from app import config
-from app.models import AGENTS, MAX_EDIT_LENGTH, MAX_IDEA_LENGTH, RunRequest
+from app.models import (
+    AGENTS,
+    MAX_EDIT_LENGTH,
+    MAX_IDEA_LENGTH,
+    MAX_OPTION_LENGTH,
+    RunRequest,
+)
 from app.security.auth import (
     is_local_request,
     resolve_session_token,
@@ -60,6 +66,16 @@ async def start_run(request: Request, payload: RunRequest):
         return JSONResponse(
             status_code=400,
             content={"error": f"Idea must be {MAX_IDEA_LENGTH} characters or fewer"},
+        )
+    if len(tech_stack) > MAX_OPTION_LENGTH:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Tech stack must be {MAX_OPTION_LENGTH} characters or fewer"},
+        )
+    if len(security_framework) > MAX_OPTION_LENGTH:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Security framework must be {MAX_OPTION_LENGTH} characters or fewer"},
         )
 
     # Each active sprint holds a worker thread and spends LLM quota.
