@@ -98,7 +98,10 @@ def run_crew_sync(
         "retrospective dates, or action-item due dates that you include. "
         "Do not use placeholder/example dates or prior-year dates such as 2023 unless the user explicitly asks for them. "
         "Never emit bracketed placeholders such as '[To be determined]'; if a sprint "
-        "period is needed, use the two-week window ending on the current date."
+        "period is needed, use the two-week window ending on the current date. "
+        "Output your deliverable as raw Markdown: never wrap the whole document in a "
+        "code fence (``` or ```markdown) — use fenced code blocks only for embedded "
+        "source code within the document."
     )
 
     gemini_llm = LLM(

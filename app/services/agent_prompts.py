@@ -11,7 +11,8 @@ Templates are ``str.format`` strings. Available placeholders:
 - ``{stack_context}``      — sentence naming the target tech stack ("" if unset)
 - ``{stack_clause}``       — short inline clause, e.g. " in Python/FastAPI" ("" if unset)
 - ``{security_framework}`` — the selected security framework (e.g. "OWASP Top-10")
-- ``{date_context}``       — current UTC date/time guidance for the agent
+- ``{date_context}``       — shared guidance injected into every task: the current
+  UTC date/time plus output-format rules (raw Markdown, no document-wide code fence)
 
 Placeholders only appear in the templates; user-supplied values are inserted
 as plain replacement values, so braces in user input are never interpreted.
