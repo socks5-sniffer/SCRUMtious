@@ -96,7 +96,9 @@ def run_crew_sync(
         f"Current UTC date and time: {current_datetime_label}. "
         "Use this current date/time for any headers, metadata, timestamps, sprint periods, "
         "retrospective dates, or action-item due dates that you include. "
-        "Do not use placeholder/example dates or prior-year dates such as 2023 unless the user explicitly asks for them."
+        "Do not use placeholder/example dates or prior-year dates such as 2023 unless the user explicitly asks for them. "
+        "Never emit bracketed placeholders such as '[To be determined]'; if a sprint "
+        "period is needed, use the two-week window ending on the current date."
     )
 
     gemini_llm = LLM(
