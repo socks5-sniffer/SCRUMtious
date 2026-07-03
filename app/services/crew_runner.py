@@ -312,7 +312,9 @@ def _on_task_complete(session_id: str, task_output, tasks_list):
                 "agent": next_agent,
             })
 
-    session["_task_idx"] = completed_idx + 1
+        # Advance the cursor only when a task was actually processed, so a
+        # spurious extra callback can't desync the session from the pipeline.
+        session["_task_idx"] = completed_idx + 1
 
 
 def _abort_hitl(session, session_id: str, message: str, hint: str) -> None:

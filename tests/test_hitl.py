@@ -158,6 +158,19 @@ def test_missing_hitl_event_marks_session_errored(tmp_path, monkeypatch):
     assert session["events"][-1]["type"] == "error"
 
 
+def test_spurious_callback_beyond_pipeline_is_ignored(tmp_path, monkeypatch):
+    # An unexpected extra callback after the last task must not advance the
+    # cursor, emit events, or record outputs.
+    session = _make_session(tmp_path, monkeypatch, _task_idx=5)
+    tasks_list = [_FakeTask("out") for _ in range(5)]
+
+    crew_runner._on_task_complete("sid", _FakeTaskOutput("extra"), tasks_list)
+
+    assert session["_task_idx"] == 5
+    assert session["events"] == []
+    assert session["outputs"] == {}
+
+
 def test_last_agent_completion_needs_no_approval(tmp_path, monkeypatch):
     session = _make_session(tmp_path, monkeypatch, _task_idx=4)
     tasks_list = [_FakeTask("out") for _ in range(5)]
