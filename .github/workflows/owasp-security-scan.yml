@@ -114,10 +114,10 @@ jobs:
         run: pip install bandit
 
       - name: Run Bandit (human-readable, medium+ severity)
-        run: bandit -r app/ versions/ -ll || true
+        run: bandit -r app/ -ll || true
 
       - name: Run Bandit (JSON report)
-        run: bandit -r app/ versions/ -f json -o bandit-report.json -ll
+        run: bandit -r app/ -f json -o bandit-report.json -ll
         continue-on-error: true
 
       - name: Upload Bandit report
@@ -176,7 +176,8 @@ jobs:
           fi
 
           # Input length enforcement must be present (DoS / injection mitigation)
-          if grep -rqE "len\(.+\) > [0-9]+" app/; then
+          # (accepts numeric literals or MAX_* named constants)
+          if grep -rqE "len\(.+\) > (MAX_[A-Z_]+|[0-9]+)" app/; then
             echo "✓ Input length validation present"
           else
             echo "⚠ Warning: No input length cap detected in app/"

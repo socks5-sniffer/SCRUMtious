@@ -12,9 +12,10 @@ tradeoffs and what multi-worker deployment would require.
 import json
 import pathlib
 from datetime import UTC, datetime
-from typing import Any
+from typing import cast
 
 from app.config import SESSIONS_DIR, logger
+from app.models import SessionState
 
 
 class SessionStore:
@@ -23,12 +24,12 @@ class SessionStore:
     def __init__(self, sessions_dir: pathlib.Path) -> None:
         self.dir = sessions_dir
         self.dir.mkdir(parents=True, exist_ok=True)
-        self.sessions: dict[str, dict[str, Any]] = {}
+        self.sessions: dict[str, SessionState] = {}
 
     def path(self, session_id: str) -> pathlib.Path:
         return self.dir / f"{session_id}.json"
 
-    def get(self, session_id: str) -> dict[str, Any] | None:
+    def get(self, session_id: str) -> SessionState | None:
         return self.sessions.get(session_id)
 
     def __contains__(self, session_id: str) -> bool:
@@ -73,13 +74,13 @@ class SessionStore:
                 status = data.get("status", "")
                 if status not in ("complete", "error"):
                     status = "error"
-                self.sessions[sid] = {
+                self.sessions[sid] = cast(SessionState, {
                     **data,
                     "status": status,
                     "events": [],
                     "_task_idx": 0,
                     "_hitl_event": None,  # not resumable after restart
-                }
+                })
             except Exception:
                 logger.warning("Could not load session file %s", p)
 

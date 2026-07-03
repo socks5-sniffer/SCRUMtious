@@ -12,15 +12,16 @@ app/
 ├── main.py              # Application factory: create_app() wires everything together
 ├── __main__.py          # `python -m app` — runs the uvicorn dev server
 ├── config.py            # Environment loading, validation, and settings
-├── models.py            # Domain metadata (the ordered agent roster)
+├── models.py            # Agent roster, request models, and the session shape
 ├── api/
 │   └── routes.py        # FastAPI route handlers — the thin HTTP layer
 ├── security/
-│   ├── auth.py          # Per-session access-token validation
+│   ├── auth.py          # Proxy-aware client identity + per-session token validation
 │   ├── headers.py       # HTTP security-headers middleware (CSP, X-Frame-Options, HSTS)
 │   └── rate_limit.py    # Per-client sliding-window rate limiter
 └── services/
     ├── session_store.py # In-memory session dict + JSON-file persistence
+    ├── agent_prompts.py # Declarative agent/task prompt specs (single source of truth)
     ├── crew_runner.py   # CrewAI agents/tasks + human-in-the-loop gate
     └── pdf_export.py    # Branded A4 PDF rendering (markdown → HTML → PDF)
 ```
@@ -36,9 +37,8 @@ app/
   middleware.
 - **`config.py`** is the single source of truth for environment-derived
   settings. Other modules import from it rather than calling `os.getenv`
-  directly (the two runtime-mutable values — `GEMINI_API_KEY` and the optional
-  `GEMINI_MODEL` override — are still read at call time in `crew_runner` so the
-  process can pick up a rotated key without a restart).
+  directly (`GEMINI_API_KEY` is the one value still read at call time in
+  `crew_runner`, so the process can pick up a rotated key without a restart).
 
 ### Entry points
 
@@ -79,7 +79,9 @@ dependency-free (no database) and easy to run locally.
   processes — a request could hit a worker that has never seen the session.
 - **Thread-per-run concurrency.** Each active sprint holds a thread (often
   blocked on HITL approval). This is fine for modest concurrency but is not a
-  job-queue.
+  job-queue. Two guards bound the damage: `MAX_CONCURRENT_RUNS` caps active
+  sprints, and `HITL_TIMEOUT_SECONDS` aborts a sprint whose approval never
+  arrives so the thread is released.
 - **At-most-once persistence.** A crash mid-run loses in-flight (non-persisted)
   events; a reloaded session is not resumable past the point it was interrupted.
 
@@ -91,3 +93,8 @@ dependency-free (no database) and easy to run locally.
   broker, and drive HITL via persisted state rather than an in-memory `Event`.
 - Run behind a reverse proxy (nginx/Caddy) terminating TLS; the app already sets
   HSTS when it sees an HTTPS scheme and emits a strict Content-Security-Policy.
+  Set `TRUST_PROXY=1` so the app resolves client identity from the last
+  `X-Forwarded-For` hop (the one your proxy appends). Without it the header is
+  ignored — it is client-controlled — but then every connection appears to come
+  from 127.0.0.1, which collapses the per-client rate limiter to a single bucket
+  and makes the local-only `/api/sessions` gate treat all traffic as local.

@@ -9,23 +9,40 @@ so the rest of the app (and the test suite) can run without the heavy dependency
 import os
 import re
 import threading
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from app.config import GEMINI_MODEL, logger
+from app.config import GEMINI_MODEL, HITL_TIMEOUT_SECONDS, logger
 from app.models import AGENT_IDS
+from app.services.agent_prompts import AGENT_PROMPTS
 from app.services.session_store import store
 
 
+class HitlTimeoutError(Exception):
+    """Raised when a sprint waits longer than HITL_TIMEOUT_SECONDS for approval.
+
+    Aborts the crew so an abandoned session releases its worker thread instead
+    of blocking it forever.
+    """
+
+
 def extract_verdict(audit_output: str) -> str:
-    """Pull an APPROVED/BLOCKED verdict out of the auditor's free-text report."""
-    structured = re.search(
-        r"\bverdict\s*[:\-]\s*(approved|blocked)\b",
-        audit_output,
-        re.IGNORECASE,
+    """Pull an APPROVED/BLOCKED verdict out of the auditor's report.
+
+    The audit prompt requires a terminal ``VERDICT: APPROVED|BLOCKED`` line, so
+    the last structured match wins; keyword scanning remains as a fallback for
+    reports that ignore the format.
+    """
+    structured = list(
+        re.finditer(
+            r"\bverdict\s*[:\-]\s*(approved|blocked)\b",
+            audit_output,
+            re.IGNORECASE,
+        )
     )
     if structured:
-        return structured.group(1).upper()
+        return structured[-1].group(1).upper()
     matches = list(re.finditer(r"\b(APPROVED|BLOCKED)\b", audit_output.upper()))
     if matches:
         return matches[-1].group(1)
@@ -79,174 +96,62 @@ def run_crew_sync(
         f"Current UTC date and time: {current_datetime_label}. "
         "Use this current date/time for any headers, metadata, timestamps, sprint periods, "
         "retrospective dates, or action-item due dates that you include. "
-        "Do not use placeholder/example dates or prior-year dates such as 2023 unless the user explicitly asks for them."
+        "Do not use placeholder/example dates or prior-year dates such as 2023 unless the user explicitly asks for them. "
+        "Never emit bracketed placeholders such as '[To be determined]'; if a sprint "
+        "period is needed, use the two-week window ending on the current date. "
+        "Output your deliverable as raw Markdown: never wrap the whole document in a "
+        "code fence (``` or ```markdown) — use fenced code blocks only for embedded "
+        "source code within the document."
     )
 
-    gemini_model = os.getenv("GEMINI_MODEL", GEMINI_MODEL)
     gemini_llm = LLM(
-        model=gemini_model,
+        model=GEMINI_MODEL,
         api_key=os.getenv("GEMINI_API_KEY"),
     )
 
-    stack_context = f" The target technology stack is: {tech_stack}." if tech_stack else ""
     security_context = security_framework or "OWASP Top-10"
+    prompt_values = {
+        "idea": idea,
+        "stack_context": f" The target technology stack is: {tech_stack}." if tech_stack else "",
+        "stack_clause": f" in {tech_stack}" if tech_stack else "",
+        "security_framework": security_context,
+        "date_context": current_date_context,
+    }
 
     def push_event(event_type: str, data: dict):
         session["events"].append({"type": event_type, **data})
 
     try:
-        # --- Agents ---
-        business_analyst = Agent(
-            role="Business Analyst",
-            goal=(
-                "Translate raw feature ideas into structured, unambiguous, "
-                "dev-ready requirements with personas, constraints, acceptance criteria, "
-                "and edge cases."
-            ),
-            backstory=(
-                "You are a meticulous Business Analyst with deep experience bridging "
-                "the gap between stakeholders and engineering teams across a wide range "
-                "of software and hardware projects."
-            ),
-            verbose=True,
-            allow_delegation=False,
-            llm=gemini_llm,
-        )
+        # Build agents and tasks from the declarative specs, preserving
+        # pipeline order (AGENT_IDS) and the context wiring between tasks.
+        agents: dict[str, Any] = {}
+        tasks: dict[str, Any] = {}
+        for agent_id in AGENT_IDS:
+            spec = AGENT_PROMPTS[agent_id]
+            agents[agent_id] = Agent(
+                role=spec["role"],
+                goal=spec["goal"].format(**prompt_values),
+                backstory=spec["backstory"].format(**prompt_values),
+                verbose=True,
+                allow_delegation=False,
+                llm=gemini_llm,
+            )
+        for agent_id in AGENT_IDS:
+            spec = AGENT_PROMPTS[agent_id]
+            task_kwargs: dict[str, Any] = {}
+            if spec["context"]:
+                task_kwargs["context"] = [tasks[dep] for dep in spec["context"]]
+            tasks[agent_id] = Task(
+                description=spec["description"].format(**prompt_values),
+                expected_output=spec["expected_output"],
+                agent=agents[agent_id],
+                **task_kwargs,
+            )
 
-        product_owner = Agent(
-            role="Product Owner",
-            goal=(
-                "Manage the product backlog and define clear, actionable technical "
-                "user stories that prioritise security best practices and "
-                "deliver genuine value to end users."
-            ),
-            backstory=(
-                "You are a seasoned Product Owner with broad experience across web, "
-                "mobile, embedded systems, and API products."
-            ),
-            verbose=True,
-            allow_delegation=False,
-            llm=gemini_llm,
-        )
+        agents_list = list(agents.values())
+        tasks_list = list(tasks.values())
 
-        lead_developer = Agent(
-            role="Lead Developer",
-            goal=(
-                "Implement production-quality code following strict secure-coding patterns: "
-                "validate all inputs, avoid dangerous built-ins, "
-                "and always include proper error handling."
-            ),
-            backstory=(
-                "You are a full-stack developer with experience across web, API, "
-                "and embedded systems projects. You write clean, well-documented, "
-                "production-quality code."
-            ),
-            verbose=True,
-            allow_delegation=False,
-            llm=gemini_llm,
-        )
-
-        security_auditor = Agent(
-            role="Security Auditor",
-            goal=(
-                "Review all code for OWASP Top-10 vulnerabilities and Principle of "
-                "Least Privilege violations. Block any artefact with eval(), missing "
-                "error handling, or exposed sensitive data."
-            ),
-            backstory=(
-                "You are a certified application-security engineer with deep knowledge "
-                "of OWASP, CWE, and threat modelling across web, API, and systems software."
-            ),
-            verbose=True,
-            allow_delegation=False,
-            llm=gemini_llm,
-        )
-
-        scrum_master = Agent(
-            role="Scrum Master",
-            goal=(
-                "After each sprint, produce a structured retrospective that captures "
-                "what went well, what was blocked, process improvements, and "
-                "prioritised follow-up actions."
-            ),
-            backstory=(
-                "You are a Certified Scrum Master who has facilitated hundreds of "
-                "sprints across diverse software teams and technology stacks."
-            ),
-            verbose=True,
-            allow_delegation=False,
-            llm=gemini_llm,
-        )
-
-        # --- Tasks ---
-        push_event("agent_start", {"agent": "business_analyst"})
-
-        task_refine = Task(
-            description=(
-                f"A new feature idea has arrived: '{idea}'.{stack_context} Transform it into a "
-                "structured requirements document with user stories, acceptance "
-                "criteria, edge cases, and any relevant safety or integration notes. "
-                f"{current_date_context}"
-            ),
-            expected_output="A structured requirements document with user stories and acceptance criteria.",
-            agent=business_analyst,
-        )
-
-        task_user_story = Task(
-            description=(
-                "Review the Business Analyst's requirements and create a sprint-ready "
-                "user story with acceptance criteria, technical details, security notes, "
-                "and learning objectives. "
-                f"{current_date_context}"
-            ),
-            expected_output="A complete sprint-ready user story.",
-            agent=product_owner,
-            context=[task_refine],
-        )
-
-        task_implement = Task(
-            description=(
-                f"Using the user story, write the implementation.{stack_context} "
-                "Sanitise inputs, use specific exception types, never use eval(), and "
-                f"follow {security_context} Secure Coding Practices. {current_date_context}"
-            ),
-            expected_output="Complete, commented source code with security measures applied.",
-            agent=lead_developer,
-            context=[task_user_story],
-        )
-
-        task_audit = Task(
-            description=(
-                f"Perform a security audit of the implementation using the {security_context} framework. "
-                "Verify least privilege, reject eval()/exec()/shell=True/bare excepts. "
-                f"Produce a structured audit report with APPROVED or BLOCKED verdict. {current_date_context}"
-            ),
-            expected_output="A structured security audit report with a final verdict.",
-            agent=security_auditor,
-            context=[task_implement],
-        )
-
-        task_retro = Task(
-            description=(
-                "Review all outputs and produce a sprint retrospective with: what went "
-                "well, blockers, at least 3 process improvements, prioritised action "
-                f"items with owners, and sprint-goal verdict. {current_date_context}"
-            ),
-            expected_output="A structured sprint retrospective report.",
-            agent=scrum_master,
-            context=[task_refine, task_user_story, task_implement, task_audit],
-        )
-
-        agents_list: list[Any] = [business_analyst, product_owner, lead_developer, security_auditor, scrum_master]
-        tasks_list = [task_refine, task_user_story, task_implement, task_audit, task_retro]
-
-        agent_task_map = {
-            id(task_refine): "business_analyst",
-            id(task_user_story): "product_owner",
-            id(task_implement): "lead_developer",
-            id(task_audit): "security_auditor",
-            id(task_retro): "scrum_master",
-        }
+        push_event("agent_start", {"agent": AGENT_IDS[0]})
 
         def _safe_step_callback(*_args, **_kwargs):
             # CrewAI callback signatures vary across versions; ignore payload safely.
@@ -261,7 +166,10 @@ def run_crew_sync(
             """
             task_output = args[0] if args else kwargs.get("task_output")
             try:
-                _on_task_complete(session_id, task_output, agent_task_map, tasks_list)
+                _on_task_complete(session_id, task_output, tasks_list)
+            except HitlTimeoutError:
+                # Deliberate abort — must propagate to stop the crew.
+                raise
             except Exception:
                 logger.exception("Task callback failed for session %s", session_id)
 
@@ -275,6 +183,11 @@ def run_crew_sync(
 
         result = crew.kickoff()
 
+        if session.get("_hitl_timed_out"):
+            # Some CrewAI versions swallow callback exceptions; the session was
+            # already marked errored at the timeout site, so don't overwrite it.
+            return
+
         audit_text = session.get("outputs", {}).get("security_auditor") or str(result)
         verdict = extract_verdict(audit_text)
         session["verdict"] = verdict
@@ -285,6 +198,11 @@ def run_crew_sync(
         session["status"] = "complete"
         store.persist(session_id)
 
+    except HitlTimeoutError:
+        # Error event and status were already recorded at the timeout site.
+        logger.warning("Sprint %s aborted: HITL approval timed out", session_id)
+        store.persist(session_id)
+
     except Exception as e:
         logger.exception("Crew execution failed")
         push_event("error", build_error_payload(e))
@@ -292,8 +210,12 @@ def run_crew_sync(
         store.persist(session_id)
 
 
-def _on_task_complete(session_id: str, task_output, agent_task_map, tasks_list):
-    """Called when a CrewAI task finishes. Pauses for human approval before continuing."""
+def _on_task_complete(session_id: str, task_output, tasks_list):
+    """Called when a CrewAI task finishes. Pauses for human approval before continuing.
+
+    The completing agent is derived from the session's ``_task_idx`` cursor —
+    the pipeline is strictly sequential, so position identifies the task.
+    """
     session = store.sessions.get(session_id)
     if not session:
         return
@@ -321,19 +243,54 @@ def _on_task_complete(session_id: str, task_output, agent_task_map, tasks_list):
         store.persist(session_id)
 
         if not is_last:
+            hitl_event = session["_hitl_event"]
+            if not isinstance(hitl_event, threading.Event):
+                # Rehydrated sessions have no live HITL event and never reach
+                # here; if that invariant is ever broken, fail visibly rather
+                # than leaving the session stuck in awaiting_approval.
+                _abort_hitl(
+                    session,
+                    session_id,
+                    message="Sprint aborted: approval gate unavailable.",
+                    hint="The session has no live approval gate. Start a new sprint.",
+                )
+                raise HitlTimeoutError(f"No HITL event available for {agent_id}")
+
+            # Re-arm the gate BEFORE announcing awaiting_approval: /api/approve
+            # only sets the event once the status flips, so clearing here means
+            # a fast approval can never be wiped by a later clear() (which
+            # would silently block the sprint until timeout).
+            hitl_event.clear()
+
             # Pause the crew thread until the user approves (or edits)
             session["status"] = "awaiting_approval"
             session["pending_approval"] = agent_id
             store.persist(session_id)
 
-            hitl_event: threading.Event = session["_hitl_event"]
-            hitl_event.clear()
-            hitl_event.wait()  # blocks the background thread here
+            # Block the crew thread until approval — or abort so an abandoned
+            # sprint releases its thread instead of holding it forever.
+            approved = hitl_event.wait(timeout=HITL_TIMEOUT_SECONDS)
+            if not approved:
+                _abort_hitl(
+                    session,
+                    session_id,
+                    message="Sprint aborted: no approval within the time limit.",
+                    hint=(
+                        f"Approvals must arrive within {HITL_TIMEOUT_SECONDS} seconds "
+                        "(HITL_TIMEOUT_SECONDS). Start a new sprint to retry."
+                    ),
+                )
+                raise HitlTimeoutError(f"Approval for {agent_id} timed out")
 
             # Apply any user edit
             edit = session.get("_hitl_edit")
             if edit is not None:
                 session["outputs"][agent_id] = edit
+                # Downstream tasks read their context from the CrewAI task
+                # output, not from session["outputs"], so the edit must be
+                # written back there too or the next agent sees the original.
+                _apply_edit_to_task_output(tasks_list[completed_idx], task_output, edit)
+                session.setdefault("_edited_agents", []).append(agent_id)
                 session["events"].append({
                     "type": "agent_edited",
                     "agent": agent_id,
@@ -350,9 +307,74 @@ def _on_task_complete(session_id: str, task_output, agent_task_map, tasks_list):
 
             # Signal the next agent is starting
             next_idx = completed_idx + 1
+            next_agent = agent_ids[next_idx]
+            if next_agent == "scrum_master":
+                _inject_pipeline_facts(session, tasks_list[next_idx])
             session["events"].append({
                 "type": "agent_start",
-                "agent": agent_ids[next_idx],
+                "agent": next_agent,
             })
 
-    session["_task_idx"] = completed_idx + 1
+        # Advance the cursor only when a task was actually processed, so a
+        # spurious extra callback can't desync the session from the pipeline.
+        session["_task_idx"] = completed_idx + 1
+
+
+def _abort_hitl(session, session_id: str, message: str, hint: str) -> None:
+    """Mark a session errored (with a visible error event) before aborting HITL.
+
+    Also sets ``_hitl_timed_out`` so ``run_crew_sync`` won't overwrite the
+    error state if the installed CrewAI version swallows callback exceptions.
+    """
+    session["_hitl_timed_out"] = True
+    session["status"] = "error"
+    session["pending_approval"] = None
+    session["events"].append({"type": "error", "message": message, "hint": hint})
+    store.persist(session_id)
+
+
+def _apply_edit_to_task_output(task, task_output, edit: str) -> None:
+    """Write a human edit into the CrewAI task output.
+
+    Downstream tasks build their context from ``task.output.raw``; both the
+    callback argument and the task's own output attribute are updated in case
+    the installed CrewAI version passes a copy rather than the same object.
+    """
+    targets: list[Any] = []
+    for candidate in (task_output, getattr(task, "output", None)):
+        if candidate is not None and not any(candidate is t for t in targets):
+            targets.append(candidate)
+    for target in targets:
+        try:
+            target.raw = edit
+        except Exception:
+            logger.warning(
+                "Could not apply HITL edit to task output of type %s",
+                type(target).__name__,
+            )
+
+
+def _inject_pipeline_facts(session: Mapping[str, Any], retro_task) -> None:
+    """Give the Scrum Master real process facts before the retrospective runs.
+
+    The retro otherwise only sees the four documents; whether a human had to
+    override an agent's output is exactly the kind of process signal a
+    retrospective should discuss.
+    """
+    edited = session.get("_edited_agents") or []
+    if edited:
+        facts = (
+            " Pipeline facts for this sprint: a human reviewer edited the output of "
+            f"the following team member(s) before approving: {', '.join(edited)}. "
+            "Discuss in the retrospective why these outputs needed human correction "
+            "and how the process could avoid it next sprint."
+        )
+    else:
+        facts = (
+            " Pipeline facts for this sprint: every hand-off was approved by the "
+            "human reviewer without edits."
+        )
+    try:
+        retro_task.description = retro_task.description + facts
+    except Exception:
+        logger.warning("Could not append pipeline facts to the retrospective task")

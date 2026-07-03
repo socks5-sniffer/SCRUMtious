@@ -19,7 +19,13 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.templating import Jinja2Templates
 
 from app import config
-from app.models import AGENTS
+from app.models import (
+    AGENTS,
+    MAX_EDIT_LENGTH,
+    MAX_IDEA_LENGTH,
+    MAX_OPTION_LENGTH,
+    RunRequest,
+)
 from app.security.auth import (
     is_local_request,
     resolve_session_token,
@@ -32,11 +38,15 @@ from app.services.session_store import store
 router = APIRouter()
 templates = Jinja2Templates(directory=config.TEMPLATES_DIR)
 
+# Makes the concurrency-cap check and session insertion atomic, so concurrent
+# /api/run requests cannot all observe the same active count and exceed the cap.
+_run_gate_lock = threading.Lock()
+
 
 @router.get("/favicon.ico", include_in_schema=False)
 async def favicon() -> FileResponse:
     """Serve favicon for browsers that request /favicon.ico directly."""
-    return FileResponse("static/favicon.svg", media_type="image/svg+xml")
+    return FileResponse(config.STATIC_DIR / "favicon.svg", media_type="image/svg+xml")
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -49,46 +59,65 @@ async def index(request: Request):
 
 
 @router.post("/api/run")
-async def start_run(request: Request):
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Request body must be valid JSON"})
-    if not isinstance(body, dict):
-        return JSONResponse(status_code=400, content={"error": "Request body must be a JSON object"})
-    idea = body.get("idea", "").strip()
-    tech_stack = body.get("tech_stack", "").strip()
-    security_framework = body.get("security_framework", "OWASP Top-10").strip()
-    client_id = client_identifier(request)
-
-    if not consume_run_token(client_id):
-        return JSONResponse(
-            status_code=429,
-            content={"error": "Rate limit exceeded. Please wait before starting another sprint."},
-        )
+async def start_run(request: Request, payload: RunRequest):
+    idea = payload.idea
+    tech_stack = payload.tech_stack
+    security_framework = payload.security_framework or "OWASP Top-10"
 
     if not idea:
         return JSONResponse(status_code=400, content={"error": "Please provide an idea"})
-    if len(idea) > 2000:
-        return JSONResponse(status_code=400, content={"error": "Idea must be 2000 characters or fewer"})
+    if len(idea) > MAX_IDEA_LENGTH:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Idea must be {MAX_IDEA_LENGTH} characters or fewer"},
+        )
+    if len(tech_stack) > MAX_OPTION_LENGTH:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Tech stack must be {MAX_OPTION_LENGTH} characters or fewer"},
+        )
+    if len(security_framework) > MAX_OPTION_LENGTH:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Security framework must be {MAX_OPTION_LENGTH} characters or fewer"},
+        )
 
-    session_id = str(uuid.uuid4())
-    session_token = secrets.token_urlsafe(32)
-    store.sessions[session_id] = {
-        "status": "running",
-        "events": [],
-        "_task_idx": 0,
-        "idea": idea,
-        "tech_stack": tech_stack,
-        "security_framework": security_framework,
-        "created_at": datetime.now(UTC).isoformat(),
-        "outputs": {},
-        "verdict": "",
-        "pending_approval": None,
-        "access_token": session_token,
-        "_hitl_event": threading.Event(),
-        "_hitl_edit": None,
-    }
+    with _run_gate_lock:
+        # Each active sprint holds a worker thread and spends LLM quota.
+        active_runs = sum(
+            1 for s in store.sessions.values() if s.get("status") in ("running", "awaiting_approval")
+        )
+        if active_runs >= config.MAX_CONCURRENT_RUNS:
+            return JSONResponse(
+                status_code=429,
+                content={"error": "Too many active sprints. Please wait for one to finish."},
+            )
+
+        # Only consume a rate-limit token for requests that will actually start a run.
+        if not consume_run_token(client_identifier(request)):
+            return JSONResponse(
+                status_code=429,
+                content={"error": "Rate limit exceeded. Please wait before starting another sprint."},
+            )
+
+        session_id = str(uuid.uuid4())
+        session_token = secrets.token_urlsafe(32)
+        store.sessions[session_id] = {
+            "status": "running",
+            "events": [],
+            "_task_idx": 0,
+            "idea": idea,
+            "tech_stack": tech_stack,
+            "security_framework": security_framework,
+            "created_at": datetime.now(UTC).isoformat(),
+            "outputs": {},
+            "verdict": "",
+            "pending_approval": None,
+            "access_token": session_token,
+            "_hitl_event": threading.Event(),
+            "_hitl_edit": None,
+            "_edited_agents": [],
+        }
     store.persist(session_id)
 
     thread = threading.Thread(
@@ -180,7 +209,13 @@ async def approve_step(session_id: str, request: Request, token: str | None = No
 
     edit = body.get("edit")
     if edit is not None:
-        session["_hitl_edit"] = str(edit).strip()
+        edit_text = str(edit).strip()
+        if len(edit_text) > MAX_EDIT_LENGTH:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Edit must be {MAX_EDIT_LENGTH} characters or fewer"},
+            )
+        session["_hitl_edit"] = edit_text
 
     # Unblock the background thread
     hitl_event_obj = session.get("_hitl_event")
@@ -209,7 +244,7 @@ async def list_sessions(request: Request, token: str | None = None):
             "verdict": s.get("verdict", ""),
             "pending_approval": s.get("pending_approval"),
         })
-    results.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    results.sort(key=lambda x: x.get("created_at") or "", reverse=True)
     return JSONResponse(content=results)
 
 
