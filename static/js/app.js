@@ -9,7 +9,11 @@
 // Configure marked
 marked.setOptions({ breaks: true, gfm: true });
 
-const AGENT_ORDER = ['business_analyst', 'product_owner', 'lead_developer', 'security_auditor', 'scrum_master'];
+// The canonical pipeline order is server-rendered (models.AGENTS via Jinja);
+// derive it from the DOM so this file can't drift from the roster.
+const AGENT_ORDER = Array.from(
+    document.querySelectorAll('#agent-cards .agent-card-header[data-agent]')
+).map(el => el.dataset.agent);
 let agentOutputs = {};  // raw markdown strings keyed by agent id
 let currentIdea = '';
 let currentSessionId = null;
@@ -284,7 +288,8 @@ function downloadArtifacts() {
     const parts = [`# Scrumtious Sprint Artifacts\n\n**Idea:** ${currentIdea}\n\n**Generated At (UTC):** ${generatedAtUtc}\n\n---\n\n`];
     AGENT_ORDER.forEach(id => {
         if (agentOutputs[id]) {
-            parts.push(agentLabels[id] + agentOutputs[id] + '\n\n---\n\n');
+            const label = agentLabels[id] || `## ${id}\n\n`;
+            parts.push(label + agentOutputs[id] + '\n\n---\n\n');
         }
     });
     const blob = new Blob([parts.join('')], { type: 'text/markdown' });

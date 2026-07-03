@@ -38,6 +38,10 @@ from app.services.session_store import store
 router = APIRouter()
 templates = Jinja2Templates(directory=config.TEMPLATES_DIR)
 
+# Makes the concurrency-cap check and session insertion atomic, so concurrent
+# /api/run requests cannot all observe the same active count and exceed the cap.
+_run_gate_lock = threading.Lock()
+
 
 @router.get("/favicon.ico", include_in_schema=False)
 async def favicon() -> FileResponse:
@@ -78,41 +82,42 @@ async def start_run(request: Request, payload: RunRequest):
             content={"error": f"Security framework must be {MAX_OPTION_LENGTH} characters or fewer"},
         )
 
-    # Each active sprint holds a worker thread and spends LLM quota.
-    active_runs = sum(
-        1 for s in store.sessions.values() if s.get("status") in ("running", "awaiting_approval")
-    )
-    if active_runs >= config.MAX_CONCURRENT_RUNS:
-        return JSONResponse(
-            status_code=429,
-            content={"error": "Too many active sprints. Please wait for one to finish."},
+    with _run_gate_lock:
+        # Each active sprint holds a worker thread and spends LLM quota.
+        active_runs = sum(
+            1 for s in store.sessions.values() if s.get("status") in ("running", "awaiting_approval")
         )
+        if active_runs >= config.MAX_CONCURRENT_RUNS:
+            return JSONResponse(
+                status_code=429,
+                content={"error": "Too many active sprints. Please wait for one to finish."},
+            )
 
-    # Only consume a rate-limit token for requests that will actually start a run.
-    if not consume_run_token(client_identifier(request)):
-        return JSONResponse(
-            status_code=429,
-            content={"error": "Rate limit exceeded. Please wait before starting another sprint."},
-        )
+        # Only consume a rate-limit token for requests that will actually start a run.
+        if not consume_run_token(client_identifier(request)):
+            return JSONResponse(
+                status_code=429,
+                content={"error": "Rate limit exceeded. Please wait before starting another sprint."},
+            )
 
-    session_id = str(uuid.uuid4())
-    session_token = secrets.token_urlsafe(32)
-    store.sessions[session_id] = {
-        "status": "running",
-        "events": [],
-        "_task_idx": 0,
-        "idea": idea,
-        "tech_stack": tech_stack,
-        "security_framework": security_framework,
-        "created_at": datetime.now(UTC).isoformat(),
-        "outputs": {},
-        "verdict": "",
-        "pending_approval": None,
-        "access_token": session_token,
-        "_hitl_event": threading.Event(),
-        "_hitl_edit": None,
-        "_edited_agents": [],
-    }
+        session_id = str(uuid.uuid4())
+        session_token = secrets.token_urlsafe(32)
+        store.sessions[session_id] = {
+            "status": "running",
+            "events": [],
+            "_task_idx": 0,
+            "idea": idea,
+            "tech_stack": tech_stack,
+            "security_framework": security_framework,
+            "created_at": datetime.now(UTC).isoformat(),
+            "outputs": {},
+            "verdict": "",
+            "pending_approval": None,
+            "access_token": session_token,
+            "_hitl_event": threading.Event(),
+            "_hitl_edit": None,
+            "_edited_agents": [],
+        }
     store.persist(session_id)
 
     thread = threading.Thread(
