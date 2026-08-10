@@ -8,7 +8,10 @@ Markdown>=3.10.2
 # xhtml2pdf requires native Cairo libs — see requirements-pdf.txt
 
 # ── AI orchestration ──────────────────────────────────────────────────────────
-crewai[google-genai]>=0.100.0
+# Floor is 1.15.1, not 0.100.0: CVE-2026-62240 (SSRF via redirect/DNS-rebinding
+# bypass in validate_url) is fixed in 1.15.1. The old >=0.100.0 floor resolved
+# to 1.15.x in practice, but scanners read the declared minimum and flagged it.
+crewai[google-genai]>=1.15.1
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 python-dotenv>=1.2.2
