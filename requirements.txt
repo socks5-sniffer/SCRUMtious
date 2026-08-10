@@ -4,7 +4,7 @@ uvicorn[standard]>=0.49.0
 
 # ── Templating & document generation ──────────────────────────────────────────
 jinja2>=3.1.6
-Markdown>=3.10.2
+Markdown>=3.10.3
 # xhtml2pdf requires native Cairo libs — see requirements-pdf.txt
 
 # ── AI orchestration ──────────────────────────────────────────────────────────
