@@ -27,6 +27,62 @@ class HitlTimeoutError(Exception):
     """
 
 
+# CrewAI's event bus is a process-wide singleton, so a single handler (registered
+# once) serves every concurrent sprint. Each run registers its own CrewAI task ids
+# here before kickoff and removes them when it finishes, so the handler can route
+# a stream chunk back to the session/agent it belongs to.
+_stream_targets: dict[str, tuple[str, str]] = {}
+_stream_targets_lock = threading.Lock()
+_stream_handler_registered = False
+_stream_handler_lock = threading.Lock()
+
+
+def _register_stream_handler() -> None:
+    """Register the LLM stream-chunk listener on CrewAI's event bus, once per process."""
+    global _stream_handler_registered
+    if _stream_handler_registered:
+        return
+    with _stream_handler_lock:
+        if _stream_handler_registered:
+            return
+
+        from crewai.events import LLMStreamChunkEvent, crewai_event_bus
+
+        @crewai_event_bus.on(LLMStreamChunkEvent)
+        def _on_llm_stream_chunk(source: Any, event: Any) -> None:
+            # Tool-call chunks carry JSON function-call argument deltas, not the
+            # agent's markdown output — only forward plain text chunks.
+            if event.tool_call is not None or not event.chunk:
+                return
+            task_id = event.task_id
+            if not task_id:
+                return
+            with _stream_targets_lock:
+                target = _stream_targets.get(task_id)
+            if not target:
+                return
+            session_id, agent_id = target
+            session = store.sessions.get(session_id)
+            if session is None:
+                return
+            session["events"].append({"type": "agent_token", "agent": agent_id, "token": event.chunk})
+
+        _stream_handler_registered = True
+
+
+def _register_stream_targets(session_id: str, tasks: Mapping[str, Any]) -> None:
+    with _stream_targets_lock:
+        for agent_id, task in tasks.items():
+            _stream_targets[str(task.id)] = (session_id, agent_id)
+
+
+def _clear_stream_targets(session_id: str) -> None:
+    with _stream_targets_lock:
+        stale = [task_id for task_id, (sid, _agent_id) in _stream_targets.items() if sid == session_id]
+        for task_id in stale:
+            del _stream_targets[task_id]
+
+
 def extract_verdict(audit_output: str) -> str:
     """Pull an APPROVED/BLOCKED verdict out of the auditor's report.
 
@@ -89,6 +145,8 @@ def run_crew_sync(
     """Run the CrewAI crew in a background thread, pushing events to the session."""
     from crewai import LLM, Agent, Crew, Task
 
+    _register_stream_handler()
+
     session = store.sessions[session_id]
     current_datetime_utc = datetime.now(UTC)
     current_datetime_label = current_datetime_utc.strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -107,6 +165,7 @@ def run_crew_sync(
     gemini_llm = LLM(
         model=GEMINI_MODEL,
         api_key=os.getenv("GEMINI_API_KEY"),
+        stream=True,
     )
 
     security_context = security_framework or "OWASP Top-10"
@@ -150,6 +209,7 @@ def run_crew_sync(
 
         agents_list = list(agents.values())
         tasks_list = list(tasks.values())
+        _register_stream_targets(session_id, tasks)
 
         push_event("agent_start", {"agent": AGENT_IDS[0]})
 
@@ -208,6 +268,9 @@ def run_crew_sync(
         push_event("error", build_error_payload(e))
         session["status"] = "error"
         store.persist(session_id)
+
+    finally:
+        _clear_stream_targets(session_id)
 
 
 def _on_task_complete(session_id: str, task_output, tasks_list):
