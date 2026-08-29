@@ -426,6 +426,10 @@ textarea::placeholder {
     word-break: break-word;
 }
 
+.output-content.streaming {
+    white-space: pre-wrap;
+}
+
 .output-content::-webkit-scrollbar {
     width: 6px;
 }

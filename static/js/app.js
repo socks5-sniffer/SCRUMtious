@@ -15,6 +15,7 @@ const AGENT_ORDER = Array.from(
     document.querySelectorAll('#agent-cards .agent-card-header[data-agent]')
 ).map(el => el.dataset.agent);
 let agentOutputs = {};  // raw markdown strings keyed by agent id
+let agentStreamBuffers = {};  // raw text accumulated from agent_token events, keyed by agent id
 let currentIdea = '';
 let currentSessionId = null;
 
@@ -88,6 +89,7 @@ async function startRun() {
         setOutputVisible(id, false);
     });
     agentOutputs = {};
+    agentStreamBuffers = {};
     document.getElementById('progress-fill').style.width = '0%';
     document.getElementById('workflow-section').classList.add('visible');
     document.getElementById('retro-section').classList.remove('visible');
@@ -135,7 +137,14 @@ function listenToEvents(sessionId) {
         const data = JSON.parse(event.data);
 
         switch (data.type) {
-            case 'agent_start':
+            case 'agent_start': {
+                agentStreamBuffers[data.agent] = '';
+                const streamContent = document.getElementById(`output-content-${data.agent}`);
+                if (streamContent) {
+                    streamContent.textContent = '';
+                    streamContent.classList.add('streaming');
+                    delete streamContent.dataset.hasOutput;
+                }
                 setAgentState(data.agent, 'active');
                 updateProgress();
                 // Hide any open HITL panel for the PREVIOUS agent
@@ -148,12 +157,24 @@ function listenToEvents(sessionId) {
                     behavior: 'smooth', block: 'center'
                 });
                 break;
+            }
+
+            case 'agent_token': {
+                const content = document.getElementById(`output-content-${data.agent}`);
+                if (content) {
+                    agentStreamBuffers[data.agent] = (agentStreamBuffers[data.agent] || '') + data.token;
+                    content.textContent = agentStreamBuffers[data.agent];
+                    content.dataset.hasOutput = '1';
+                }
+                break;
+            }
 
             case 'agent_complete':
                 setAgentState(data.agent, 'done');
                 if (data.output) {
                     agentOutputs[data.agent] = data.output;
                     const content = document.getElementById(`output-content-${data.agent}`);
+                    content.classList.remove('streaming');
                     content.innerHTML = renderMarkdown(data.output);
                     content.dataset.hasOutput = '1';
                     // Pre-fill HITL edit textarea with agent output
