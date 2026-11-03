@@ -1,0 +1,16 @@
+[
+  {
+    "name": "dompurify",
+    "version": "3.4.17",
+    "file": "purify.min.js",
+    "sha256": "cd37898f9782adf54820c413191b5691803f0f137c799d6edcfd38523b4c2c31",
+    "source": "https://raw.githubusercontent.com/cure53/DOMPurify/3.4.17/dist/purify.min.js"
+  },
+  {
+    "name": "marked",
+    "version": "18.1.3",
+    "file": "marked.min.js",
+    "sha256": "c34a221dc89e91833a88822e7717b8a0cf27118f8c9a8779dffb48a6be31f97a",
+    "source": "https://registry.npmjs.org/marked/-/marked-18.1.3.tgz"
+  }
+]

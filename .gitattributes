@@ -1,0 +1,2 @@
+# Vendored release bytes are verified against static/vendor/manifest.json.
+/static/vendor/*.js -text

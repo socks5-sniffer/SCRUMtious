@@ -149,7 +149,7 @@ scrumtious/
 
 ### Prerequisites
 
-- Python **3.11** or **3.12** (not 3.14 — CrewAI's dependency chain does not yet support it)
+- A current security patch release of Python **3.11** or **3.12** (not 3.14 — CrewAI's dependency chain does not yet support it). Prefer Python 3.12 for a fresh environment.
 - A [Google AI Studio](https://aistudio.google.com/apikey) API key (Gemini)
 
 ### 1. Clone and create a virtual environment
@@ -158,18 +158,24 @@ scrumtious/
 git clone https://github.com/socks5-sniffer/scrumtious.git
 cd scrumtious
 
-py -3.11 -m venv venv
+py -3.12 -m venv .venv
 # Windows
-.\venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 # macOS / Linux
-source venv/bin/activate
+source .venv/bin/activate
 ```
 
 ### 2. Install dependencies
 
 ```bash
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+pip install --only-binary=:all: -c requirements.lock -r requirements.txt
 ```
+
+Use a fresh virtual environment when upgrading an old checkout. Do not reuse an
+old environment just because the declared requirements have changed. The lock
+also covers optional PDF and development dependencies; see
+[dependency maintenance](docs/dependency-maintenance.md) for installation and audit commands.
 
 ### 3. Configure environment variables
 
@@ -184,7 +190,7 @@ Edit `.env`:
 GEMINI_API_KEY=your-gemini-api-key-here
 
 # Optional — override the default model
-# GEMINI_MODEL=gemini/gemini-2.0-flash
+# GEMINI_MODEL=gemini/gemini-2.5-flash
 
 # Optional — Firebase project board sync
 # FIREBASE_PROJECT_ID=your-firebase-project-id
@@ -259,17 +265,11 @@ breakdown). Route handlers in `app/api/routes.py` stay thin and delegate to the
 ### `templates/index.html` — Single-page UI
 
 - No framework — plain HTML, CSS custom properties, and vanilla JavaScript.
-- `marked.js` (CDN) renders all agent output as HTML.
+- Vendored `marked.js` renders agent output as HTML; vendored DOMPurify sanitizes it before insertion into the page.
 - `EventSource` drives the live feed; the connection stays open during HITL pauses and closes automatically when the session completes or errors.
 - After each agent completes (except the Scrum Master), an **amber approval panel** slides open showing the agent's full output pre-filled into an edit textarea. The user can read, edit, and then continue the sprint.
 - When the server confirms the approval, the `agent_start` SSE event for the next agent hides the panel automatically.
 - `downloadArtifacts()` assembles a labelled Markdown document client-side and triggers a native download — no server roundtrip.
-
-### `scrumtious.py` — Original CLI
-
-The original standalone script includes an extended pipeline with a **remediation loop**: if the Security Auditor returns `BLOCKED`, the Lead Developer reworks the code and a re-audit runs before the Scrum Master retrospective is generated.
-
----
 
 ## Environment Variables Reference
 
@@ -284,13 +284,18 @@ The original standalone script includes an extended pipeline with a **remediatio
 | `SESSION_LIST_TOKEN` | No | — | Shared token required to call `GET /api/sessions` (in addition to localhost restriction) |
 | `COOKIE_SECURE` | No | `0` | Set to `1` in HTTPS deployments to mark auth cookie as `Secure` |
 
+The default Gemini 2.5 Flash model is deprecated and access is limited to existing
+users. Google schedules automatic routing to Gemini 3.5 Flash-Lite on December 1,
+2026. Choose and validate a supported `GEMINI_MODEL` for your account before that
+date; see [Google's migration schedule](https://ai.google.dev/gemini-api/docs/deprecations).
+
 ---
 
 ## Roadmap
 
 - [x] Human-in-the-loop approval gate between agents (with optional edits)
 - [x] Session persistence (JSON file store in `sessions/`)
-- [ ] PDF export of artifact bundle
+- [x] PDF export of artifact bundle (install `requirements-pdf.txt`)
 - [ ] Custom agent configuration (add/remove/reorder agents)
 - [ ] Firebase Firestore project board sync (live integration)
 - [ ] Jira / GitHub Issues integration for artifact export

@@ -48,15 +48,15 @@ git clone https://github.com/<your-username>/SCRUMtious.git
 cd SCRUMtious
 
 # 2. Create a virtual environment
-py -3.11 -m venv venv
+py -3.12 -m venv .venv
 
 # Windows
-.\venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 # macOS / Linux
-source venv/bin/activate
+source .venv/bin/activate
 
 # 3. Install dependencies
-pip install -r requirements.txt
+pip install --only-binary=:all: -c requirements.lock -r requirements.txt
 
 # 4. Set up environment variables
 cp .env.example .env
@@ -75,7 +75,7 @@ The app will be available at **http://127.0.0.1:8000**.
 Install the development dependencies, then run the suite:
 
 ```bash
-pip install -r requirements.txt -r requirements-dev.txt
+pip install --only-binary=:all: -r requirements.lock
 
 pytest             # run the test suite
 ruff check app/    # lint
@@ -84,6 +84,10 @@ mypy app/ --ignore-missing-imports   # type check
 
 The tests stub out the CrewAI call, so they run fast and require no API key
 (a placeholder `GEMINI_API_KEY` is set automatically by the test fixtures).
+
+See [dependency maintenance](docs/dependency-maintenance.md) before changing
+dependency pins or vendored browser libraries. CI installs the reviewed lock
+and fails on known dependency vulnerabilities.
 
 The backend lives in the `app/` package — see
 [`docs/architecture.md`](docs/architecture.md) for the module layout and design

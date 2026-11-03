@@ -125,7 +125,7 @@ def build_error_payload(exc: Exception) -> dict[str, str]:
         )
     elif "no longer available" in lower or "not supported for generatecontent" in lower:
         message = "Gemini model is deprecated or unavailable for this project."
-        hint = "Set GEMINI_MODEL to a current model (for example: gemini/gemini-2.5-flash)."
+        hint = "Set GEMINI_MODEL to a supported model for your project; check Google's model deprecation schedule."
     elif "quota" in lower or "rate" in lower:
         message = "Gemini request was rejected due to quota/rate limits."
         hint = "Check project quota limits and retry later."
@@ -236,6 +236,9 @@ def run_crew_sync(
         crew = Crew(
             agents=agents_list,
             tasks=tasks_list,
+            # This pipeline passes task context directly; it does not need
+            # Chroma-backed memory or a collection-management server.
+            memory=False,
             verbose=True,
             step_callback=_safe_step_callback,
             task_callback=_safe_task_callback,
