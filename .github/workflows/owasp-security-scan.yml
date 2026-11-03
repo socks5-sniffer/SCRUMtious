@@ -32,24 +32,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install system dependencies for pycairo/xhtml2pdf
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libcairo2-dev \
-            pkg-config \
-            python3-dev
-
       - name: Install pip-audit
-        run: pip install pip-audit
-
-      - name: Run pip-audit (human-readable)
-        run: pip-audit -r requirements.txt -r requirements-pdf.txt
-        continue-on-error: true
+        run: pip install --only-binary=:all: pip-audit==2.10.1
 
       - name: Run pip-audit (JSON report)
-        run: pip-audit -r requirements.txt -r requirements-pdf.txt -f json -o pip-audit-report.json
-        continue-on-error: true
+        run: pip-audit --disable-pip --no-deps -r requirements.lock -f json -o pip-audit-report.json
+
+      - name: Audit vendored browser dependencies
+        if: success() || failure()
+        run: python scripts/audit_vendor.py
 
       - name: Upload pip-audit report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -114,11 +105,11 @@ jobs:
         run: pip install bandit
 
       - name: Run Bandit (human-readable, medium+ severity)
-        run: bandit -r app/ -ll || true
+        run: bandit -r app/ -ll
 
       - name: Run Bandit (JSON report)
+        if: success() || failure()
         run: bandit -r app/ -f json -o bandit-report.json -ll
-        continue-on-error: true
 
       - name: Upload Bandit report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -252,22 +243,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libcairo2-dev \
-            pkg-config \
-            python3-dev
-
       - name: Install dependencies and mypy
         run: |
-          pip install -r requirements.txt
-          pip install mypy
+          pip install --only-binary=:all: -c requirements.lock -r requirements.txt -r requirements-pdf.txt -r requirements-dev.txt
 
       - name: Run mypy type check
         run: mypy app/ --ignore-missing-imports --no-error-summary
-        continue-on-error: true
 
   # ---------------------------------------------------------------------------
   # Summary: collects results from all jobs and writes a step summary table
