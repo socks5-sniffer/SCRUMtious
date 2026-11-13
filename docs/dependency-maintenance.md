@@ -93,6 +93,9 @@ separately reviewed replacement of the orchestration dependency. See the
 
 ## Local verification
 
+On November 12, Markdown was updated to 3.11.3 and all 166 locked entries were
+rechecked against OSV; ChromaDB remained the only affected package.
+
 Validated on Windows using a new `.venv-modern` environment with Python 3.12.16;
 the old `venv` was neither executed nor modified. The managed runtime is under
 `.tools/python`; both directories are ignored by Git and must stay together.

@@ -72,7 +72,7 @@ lark==1.3.1
 librt==0.16.0 ; platform_python_implementation != 'PyPy'
 linkify-it-py==2.2.0
 lxml==6.1.3
-markdown==3.11.2
+markdown==3.11.3
 markdown-it-py==4.2.0
 markupsafe==3.0.4
 mcp==1.30.0

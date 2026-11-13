@@ -7,7 +7,7 @@ starlette==1.10.0
 
 # ── Templating & document generation ──────────────────────────────────────────
 jinja2==3.1.6
-Markdown==3.11.2
+Markdown==3.11.3
 # Optional PDF renderer — see requirements-pdf.txt.
 
 # ── AI orchestration ──────────────────────────────────────────────────────────
