@@ -1,17 +1,19 @@
 # ── Web framework ─────────────────────────────────────────────────────────────
-fastapi>=0.141.1
-uvicorn[standard]>=0.52.4
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+# Explicitly require the patched Starlette line, including Windows StaticFiles
+# credential-disclosure and Host-header fixes.
+starlette==1.10.0
 
 # ── Templating & document generation ──────────────────────────────────────────
-jinja2>=3.1.6
-Markdown>=3.10.3
-# xhtml2pdf requires native Cairo libs — see requirements-pdf.txt
+jinja2==3.1.6
+Markdown==3.11.3
+# Optional PDF renderer — see requirements-pdf.txt.
 
 # ── AI orchestration ──────────────────────────────────────────────────────────
-# Floor is 1.15.1, not 0.100.0: CVE-2026-62240 (SSRF via redirect/DNS-rebinding
-# bypass in validate_url) is fixed in 1.15.1. The old >=0.100.0 floor resolved
-# to 1.15.x in practice, but scanners read the declared minimum and flagged it.
-crewai[google-genai]>=1.15.1
+# Use the native Google provider; no code-execution or scraping tools are enabled.
+# 1.15.34 also refreshes vulnerable transitive dependency floors.
+crewai[google-genai]==1.15.34
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-python-dotenv>=1.2.3
+python-dotenv==1.2.4
