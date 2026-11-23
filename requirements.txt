@@ -1,5 +1,5 @@
 # ── Web framework ─────────────────────────────────────────────────────────────
-fastapi==0.162.0
+fastapi==0.165.0
 uvicorn[standard]==0.54.0
 # Explicitly require the patched Starlette line, including Windows StaticFiles
 # credential-disclosure and Host-header fixes.
